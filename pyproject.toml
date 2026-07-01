@@ -21,7 +21,12 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Artificial Intelligence"
 ]
-dependencies = []
+dependencies = [
+  "PyYAML>=6.0"
+]
+
+[project.scripts]
+graphnamlss = "graphnamlss.cli:main"
 
 [project.optional-dependencies]
 dev = [

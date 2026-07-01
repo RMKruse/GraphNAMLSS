@@ -1,0 +1,42 @@
+dataset:
+  name: METR-LA
+  task: fifteen_minute_ahead_speed
+  adjacency: dataset_provided
+split:
+  strategy: temporal
+  train: 0.7
+  validation: 0.1
+  test: 0.2
+features:
+  local:
+    - current_speed
+    - lag_5m
+    - lag_10m
+    - lag_15m
+    - lag_30m
+    - lag_60m
+    - time_of_day
+    - day_of_week
+    - weekend
+  neighbor:
+    - neighbor_current_speed
+    - neighbor_lag_5m
+    - neighbor_lag_10m
+    - neighbor_lag_15m
+    - neighbor_lag_30m
+    - neighbor_lag_60m
+model:
+  family: GraphNAMLSS
+  variant: tracer_bullet
+  distribution: gaussian_location_scale
+  graph_representation: shared
+  graph_injection: additive_graph_contribution
+  graph_stream_self_feature_access: neighbor_focused
+  graph_encoder: graphsage
+optimizer:
+  name: adam
+  learning_rate: 0.001
+  max_epochs: 1
+output:
+  directory: ../runs/tracer-bullet-dry-run
+  run_name: tracer-bullet-dry-run

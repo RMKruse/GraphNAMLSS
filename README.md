@@ -20,7 +20,17 @@ python -m pytest
 
 If your system exposes Python as `python3`, use `python3 -m venv .venv` for the first command.
 
-The initial scaffold has no mandatory runtime dependencies. The `dev` extra installs the test runner used by the package skeleton.
+The initial scaffold keeps mandatory runtime dependencies minimal. PyYAML backs the Simple Experiment Config loader, and the `dev` extra installs the test runner used by the package skeleton.
+
+## Simple Experiment Config Dry Run
+
+The first tracer-bullet experiment contract is a YAML-backed Simple Experiment Config. The sample config validates the METR-LA tracer setup without downloading METR-LA or starting training:
+
+```bash
+graphnamlss dry-run --config configs/tracer_bullet.yaml
+```
+
+The dry run prints the resolved dataset, temporal split, feature, model, optimizer, and output settings. It also creates the configured output directory and writes `resolved_config.json` there so the run settings are auditable.
 
 ## Explicit PyG Dependency Policy
 
