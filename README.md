@@ -32,6 +32,12 @@ graphnamlss dry-run --config configs/tracer_bullet.yaml
 
 The dry run prints the resolved dataset, temporal split, feature, model, optimizer, and output settings. It also creates the configured output directory and writes `resolved_config.json` there so the run settings are auditable.
 
+## Synthetic Traffic Fixture
+
+Fast tests can use `graphnamlss.testing.load_synthetic_traffic_fixture()` for a tiny deterministic traffic-style fixture. It contains multiple sensors, multiple five-minute time points, lagged local covariates, neighbor traffic summaries, missingness cases, and a small physical adjacency structure.
+
+This fixture is test data, not a scientific benchmark. It exists to exercise splitting, lagging, adjacency handling, likelihood, model, metric, and smoke-run code paths without downloading METR-LA or using network access.
+
 ## Explicit PyG Dependency Policy
 
 PyTorch and PyTorch Geometric dependencies stay explicit. They are optional for the initial package import, but graph experiments should install the PyG extra in the project environment:
