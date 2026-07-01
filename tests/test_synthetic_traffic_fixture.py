@@ -44,3 +44,48 @@ def test_synthetic_traffic_fixture_provides_temporal_split_observations():
     assert {row.time_index for row in splits["validation"]} == {4, 5}
     assert {row.time_index for row in splits["test"]} == {6, 7}
     assert {row.sensor_id for row in splits["train"]} == set(fixture.sensors)
+
+
+def test_synthetic_traffic_split_partitions_share_sensor_graph_metadata():
+    fixture = load_synthetic_traffic_fixture(seed=3)
+
+    splits = fixture.temporal_split_observations(train=0.5, validation=0.25, test=0.25)
+
+    for partition in splits.values():
+        assert partition.sensors == fixture.sensors
+        assert partition.adjacency == fixture.adjacency
+
+    assert splits["train"].time_points == fixture.time_points[:4]
+    assert splits["validation"].time_points == fixture.time_points[4:6]
+    assert splits["test"].time_points == fixture.time_points[6:]
+    assert {row.time_index for row in splits["validation"].observations} == {4, 5}
+
+
+def test_synthetic_traffic_split_observations_are_chronological():
+    fixture = load_synthetic_traffic_fixture(seed=3)
+
+    splits = fixture.temporal_split_observations(train=0.5, validation=0.25, test=0.25)
+
+    for partition in splits.values():
+        sensor_times = [(row.time_index, row.sensor_id) for row in partition.observations]
+        assert sensor_times == sorted(sensor_times)
+
+
+def test_synthetic_traffic_split_does_not_leak_sensor_times_between_partitions():
+    fixture = load_synthetic_traffic_fixture(seed=3)
+
+    splits = fixture.temporal_split_observations(train=0.5, validation=0.25, test=0.25)
+    train_times = {row.time_index for row in splits["train"].observations}
+    validation_times = {row.time_index for row in splits["validation"].observations}
+    test_times = {row.time_index for row in splits["test"].observations}
+
+    assert max(train_times) < min(validation_times)
+    assert max(validation_times) < min(test_times)
+
+    split_sensor_times = [
+        {(row.sensor_id, row.time_index) for row in partition.observations}
+        for partition in splits.values()
+    ]
+    assert split_sensor_times[0].isdisjoint(split_sensor_times[1])
+    assert split_sensor_times[0].isdisjoint(split_sensor_times[2])
+    assert split_sensor_times[1].isdisjoint(split_sensor_times[2])

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Iterator
 import math
 import random
 
@@ -27,6 +28,17 @@ class SyntheticTrafficObservation:
 
 
 @dataclass(frozen=True)
+class SyntheticTrafficSplit:
+    sensors: tuple[str, ...]
+    time_points: tuple[datetime, ...]
+    adjacency: tuple[SyntheticTrafficEdge, ...]
+    observations: tuple[SyntheticTrafficObservation, ...]
+
+    def __iter__(self) -> Iterator[SyntheticTrafficObservation]:
+        return iter(self.observations)
+
+
+@dataclass(frozen=True)
 class SyntheticTrafficFixture:
     sensors: tuple[str, ...]
     time_points: tuple[datetime, ...]
@@ -38,7 +50,7 @@ class SyntheticTrafficFixture:
         train: float = 0.5,
         validation: float = 0.25,
         test: float = 0.25,
-    ) -> dict[str, tuple[SyntheticTrafficObservation, ...]]:
+    ) -> dict[str, SyntheticTrafficSplit]:
         split_total = train + validation + test
         if abs(split_total - 1.0) > 1e-6:
             raise ValueError(
@@ -59,10 +71,27 @@ class SyntheticTrafficFixture:
                 split_for_time[time_index] = "test"
 
         return {
-            split_name: tuple(
-                observation
-                for observation in self.observations
-                if split_for_time[observation.time_index] == split_name
+            split_name: SyntheticTrafficSplit(
+                sensors=self.sensors,
+                time_points=tuple(
+                    timestamp
+                    for time_index, timestamp in enumerate(self.time_points)
+                    if split_for_time[time_index] == split_name
+                ),
+                adjacency=self.adjacency,
+                observations=tuple(
+                    sorted(
+                        (
+                            observation
+                            for observation in self.observations
+                            if split_for_time[observation.time_index] == split_name
+                        ),
+                        key=lambda observation: (
+                            observation.time_index,
+                            observation.sensor_id,
+                        ),
+                    )
+                ),
             )
             for split_name in ("train", "validation", "test")
         }
