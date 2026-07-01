@@ -2,6 +2,7 @@
 
 from graphnamlss.testing.synthetic_traffic import (
     SyntheticTrafficEdge,
+    SyntheticTrafficFeatureMetadata,
     SyntheticTrafficFixture,
     SyntheticTrafficObservation,
     SyntheticTrafficSplit,
@@ -10,6 +11,7 @@ from graphnamlss.testing.synthetic_traffic import (
 
 __all__ = [
     "SyntheticTrafficEdge",
+    "SyntheticTrafficFeatureMetadata",
     "SyntheticTrafficFixture",
     "SyntheticTrafficObservation",
     "SyntheticTrafficSplit",

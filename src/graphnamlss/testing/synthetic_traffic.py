@@ -28,10 +28,20 @@ class SyntheticTrafficObservation:
 
 
 @dataclass(frozen=True)
+class SyntheticTrafficFeatureMetadata:
+    name: str
+    source: str
+    dtype: str
+    unit: str
+    offset_minutes: int | None
+
+
+@dataclass(frozen=True)
 class SyntheticTrafficSplit:
     sensors: tuple[str, ...]
     time_points: tuple[datetime, ...]
     adjacency: tuple[SyntheticTrafficEdge, ...]
+    local_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
     observations: tuple[SyntheticTrafficObservation, ...]
 
     def __iter__(self) -> Iterator[SyntheticTrafficObservation]:
@@ -43,6 +53,7 @@ class SyntheticTrafficFixture:
     sensors: tuple[str, ...]
     time_points: tuple[datetime, ...]
     adjacency: tuple[SyntheticTrafficEdge, ...]
+    local_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
     observations: tuple[SyntheticTrafficObservation, ...]
 
     def temporal_split_observations(
@@ -79,6 +90,7 @@ class SyntheticTrafficFixture:
                     if split_for_time[time_index] == split_name
                 ),
                 adjacency=self.adjacency,
+                local_feature_metadata=self.local_feature_metadata,
                 observations=tuple(
                     sorted(
                         (
@@ -97,13 +109,31 @@ class SyntheticTrafficFixture:
         }
 
 
+LOCAL_FEATURE_METADATA = (
+    SyntheticTrafficFeatureMetadata("current_speed", "traffic", "continuous", "speed", 0),
+    SyntheticTrafficFeatureMetadata(
+        "current_speed_missing", "traffic_missingness", "indicator", "flag", 0
+    ),
+    SyntheticTrafficFeatureMetadata("lag_5m", "traffic_lag", "continuous", "speed", -5),
+    SyntheticTrafficFeatureMetadata("lag_10m", "traffic_lag", "continuous", "speed", -10),
+    SyntheticTrafficFeatureMetadata("lag_15m", "traffic_lag", "continuous", "speed", -15),
+    SyntheticTrafficFeatureMetadata("lag_30m", "traffic_lag", "continuous", "speed", -30),
+    SyntheticTrafficFeatureMetadata("lag_60m", "traffic_lag", "continuous", "speed", -60),
+    SyntheticTrafficFeatureMetadata(
+        "time_of_day", "calendar", "continuous", "hour_of_day", 0
+    ),
+    SyntheticTrafficFeatureMetadata("day_of_week", "calendar", "ordinal", "weekday", 0),
+    SyntheticTrafficFeatureMetadata("weekend", "calendar", "indicator", "flag", 0),
+)
+
+
 def load_synthetic_traffic_fixture(seed: int = 20250214) -> SyntheticTrafficFixture:
     """Build tiny deterministic traffic test data, not a scientific benchmark."""
 
     rng = random.Random(seed)
     sensors = ("sensor_a", "sensor_b", "sensor_c", "sensor_d")
     start = datetime(2026, 1, 5, 7, 0)
-    time_points = tuple(start + timedelta(minutes=5 * step) for step in range(8))
+    time_points = tuple(start + timedelta(minutes=5 * step) for step in range(16))
     adjacency = (
         SyntheticTrafficEdge("sensor_a", "sensor_b", 0.8),
         SyntheticTrafficEdge("sensor_b", "sensor_c", 0.6),
@@ -144,6 +174,7 @@ def load_synthetic_traffic_fixture(seed: int = 20250214) -> SyntheticTrafficFixt
         sensors=sensors,
         time_points=time_points,
         adjacency=adjacency,
+        local_feature_metadata=LOCAL_FEATURE_METADATA,
         observations=tuple(observations),
     )
 
@@ -183,7 +214,9 @@ def _target_reading(
     time_index: int,
     missing: set[tuple[str, int]],
 ) -> float | None:
-    target_index = min(time_index + 3, max(index for _sensor, index in speeds))
+    target_index = time_index + 3
+    if (sensor_id, target_index) not in speeds:
+        return None
     return _reading(speeds, sensor_id, target_index, missing)
 
 
@@ -200,6 +233,8 @@ def _local_covariates(
         "lag_5m": _lag_reading(speeds, sensor_id, time_index, 1, current_missing),
         "lag_10m": _lag_reading(speeds, sensor_id, time_index, 2, current_missing),
         "lag_15m": _lag_reading(speeds, sensor_id, time_index, 3, current_missing),
+        "lag_30m": _lag_reading(speeds, sensor_id, time_index, 6, current_missing),
+        "lag_60m": _lag_reading(speeds, sensor_id, time_index, 12, current_missing),
         "time_of_day": timestamp.hour + timestamp.minute / 60.0,
         "day_of_week": float(timestamp.weekday()),
         "weekend": timestamp.weekday() >= 5,

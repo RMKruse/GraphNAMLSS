@@ -22,6 +22,59 @@ def test_synthetic_traffic_fixture_behaves_like_sensor_time_observations():
     assert any(row.current_speed_missing for row in fixture.observations)
 
 
+def test_synthetic_traffic_fixture_aligns_fifteen_minute_target_per_sensor():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    prediction_time = _observation(fixture, "sensor_a", 2)
+    horizon_time = _observation(fixture, "sensor_a", 5)
+
+    assert prediction_time.target_speed == horizon_time.current_speed
+    assert not prediction_time.target_missing
+
+    for time_index in (13, 14, 15):
+        tail_observation = _observation(fixture, "sensor_a", time_index)
+        assert tail_observation.target_speed is None
+        assert tail_observation.target_missing
+
+
+def test_synthetic_traffic_fixture_aligns_full_local_covariate_set_from_history():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    observation = _observation(fixture, "sensor_a", 12)
+    covariates = observation.local_covariates
+
+    assert covariates["current_speed"] == observation.current_speed
+    assert covariates["lag_5m"] == _observation(fixture, "sensor_a", 11).current_speed
+    assert covariates["lag_10m"] == _observation(fixture, "sensor_a", 10).current_speed
+    assert covariates["lag_15m"] == _observation(fixture, "sensor_a", 9).current_speed
+    assert covariates["lag_30m"] == _observation(fixture, "sensor_a", 6).current_speed
+    assert covariates["lag_60m"] == _observation(fixture, "sensor_a", 0).current_speed
+
+    first_observation = _observation(fixture, "sensor_a", 0)
+    assert first_observation.local_covariates["lag_5m"] is None
+    assert first_observation.local_covariates["lag_60m"] is None
+
+
+def test_synthetic_traffic_fixture_exposes_local_feature_metadata():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    observation = _observation(fixture, "sensor_a", 12)
+    metadata_by_name = {
+        feature.name: feature for feature in fixture.local_feature_metadata
+    }
+
+    assert tuple(metadata_by_name) == tuple(observation.local_covariates)
+    assert observation.local_covariates["time_of_day"] == 8.0
+    assert observation.local_covariates["day_of_week"] == 0.0
+    assert observation.local_covariates["weekend"] is False
+
+    assert metadata_by_name["lag_60m"].source == "traffic_lag"
+    assert metadata_by_name["lag_60m"].offset_minutes == -60
+    assert metadata_by_name["time_of_day"].source == "calendar"
+    assert metadata_by_name["time_of_day"].unit == "hour_of_day"
+    assert metadata_by_name["weekend"].dtype == "indicator"
+
+
 def test_synthetic_traffic_fixture_is_deterministic_under_fixed_seed():
     first = load_synthetic_traffic_fixture(seed=11)
     second = load_synthetic_traffic_fixture(seed=11)
@@ -40,9 +93,9 @@ def test_synthetic_traffic_fixture_provides_temporal_split_observations():
     splits = fixture.temporal_split_observations(train=0.5, validation=0.25, test=0.25)
 
     assert set(splits) == {"train", "validation", "test"}
-    assert {row.time_index for row in splits["train"]} == {0, 1, 2, 3}
-    assert {row.time_index for row in splits["validation"]} == {4, 5}
-    assert {row.time_index for row in splits["test"]} == {6, 7}
+    assert {row.time_index for row in splits["train"]} == set(range(8))
+    assert {row.time_index for row in splits["validation"]} == set(range(8, 12))
+    assert {row.time_index for row in splits["test"]} == set(range(12, 16))
     assert {row.sensor_id for row in splits["train"]} == set(fixture.sensors)
 
 
@@ -54,11 +107,12 @@ def test_synthetic_traffic_split_partitions_share_sensor_graph_metadata():
     for partition in splits.values():
         assert partition.sensors == fixture.sensors
         assert partition.adjacency == fixture.adjacency
+        assert partition.local_feature_metadata == fixture.local_feature_metadata
 
-    assert splits["train"].time_points == fixture.time_points[:4]
-    assert splits["validation"].time_points == fixture.time_points[4:6]
-    assert splits["test"].time_points == fixture.time_points[6:]
-    assert {row.time_index for row in splits["validation"].observations} == {4, 5}
+    assert splits["train"].time_points == fixture.time_points[:8]
+    assert splits["validation"].time_points == fixture.time_points[8:12]
+    assert splits["test"].time_points == fixture.time_points[12:]
+    assert {row.time_index for row in splits["validation"].observations} == set(range(8, 12))
 
 
 def test_synthetic_traffic_split_observations_are_chronological():
@@ -89,3 +143,11 @@ def test_synthetic_traffic_split_does_not_leak_sensor_times_between_partitions()
     assert split_sensor_times[0].isdisjoint(split_sensor_times[1])
     assert split_sensor_times[0].isdisjoint(split_sensor_times[2])
     assert split_sensor_times[1].isdisjoint(split_sensor_times[2])
+
+
+def _observation(fixture, sensor_id, time_index):
+    return next(
+        row
+        for row in fixture.observations
+        if row.sensor_id == sensor_id and row.time_index == time_index
+    )
