@@ -199,6 +199,89 @@ def test_synthetic_traffic_split_does_not_leak_sensor_times_between_partitions()
     assert split_sensor_times[1].isdisjoint(split_sensor_times[2])
 
 
+def test_synthetic_traffic_split_masks_missing_targets_for_loss_and_metrics():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    splits = fixture.temporal_split_observations(train=0.5, validation=0.25, test=0.25)
+    train_rows = splits["train"].observed_target_observations()
+
+    assert train_rows
+    assert all(not row.target_missing for row in train_rows)
+    assert len(train_rows) == sum(
+        1 for row in splits["train"].observations if not row.target_missing
+    )
+
+
+def test_synthetic_traffic_lag_imputation_uses_only_past_observations():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    imputed = fixture.with_past_lag_imputation()
+    row = _observation(imputed, "sensor_b", 4)
+
+    assert _observation(fixture, "sensor_b", 4).local_covariates["lag_5m"] is None
+    assert row.local_covariates["lag_5m"] == _observation(
+        fixture, "sensor_b", 2
+    ).current_speed
+    assert row.local_covariates["lag_5m"] != _observation(
+        fixture, "sensor_b", 4
+    ).current_speed
+
+
+def test_synthetic_traffic_neighbor_lag_imputation_uses_only_past_observations():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    imputed = fixture.with_past_lag_imputation()
+    row = _observation(imputed, "sensor_c", 4)
+
+    assert _observation(fixture, "sensor_c", 4).neighbor_covariates[
+        "neighbor_lag_5m"
+    ] is None
+    assert row.neighbor_covariates["neighbor_lag_5m"] == _observation(
+        fixture, "sensor_b", 2
+    ).current_speed
+    assert row.neighbor_covariates["neighbor_lag_5m_missing"] is True
+    assert row.neighbor_covariates["neighbor_lag_5m_imputed"] is True
+
+
+def test_synthetic_traffic_lag_imputation_exposes_indicator_metadata():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    imputed = fixture.with_past_lag_imputation()
+    imputed_row = _observation(imputed, "sensor_b", 4)
+    observed_row = _observation(imputed, "sensor_b", 5)
+    metadata_by_name = {
+        feature.name: feature for feature in imputed.local_feature_metadata
+    }
+    neighbor_metadata_by_name = {
+        feature.name: feature for feature in imputed.neighbor_feature_metadata
+    }
+
+    assert imputed_row.local_covariates["lag_5m_imputed"] is True
+    assert observed_row.local_covariates["lag_5m_imputed"] is False
+    assert metadata_by_name["lag_5m_imputed"].source == "traffic_imputation"
+    assert metadata_by_name["lag_5m_imputed"].dtype == "indicator"
+    assert (
+        neighbor_metadata_by_name["neighbor_lag_5m_imputed"].source
+        == "neighbor_traffic_imputation"
+    )
+
+
+def test_synthetic_traffic_fixture_reports_missingness_policy():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    report = fixture.with_past_lag_imputation().missingness_report()
+
+    assert report.target_missing_count == sum(
+        1 for row in fixture.observations if row.target_missing
+    )
+    assert report.target_missing_rate == report.target_missing_count / len(
+        fixture.observations
+    )
+    assert report.imputation_strategy == "past_observed_lag"
+    assert "lag_5m" in report.imputed_feature_names
+    assert "neighbor_lag_5m" in report.imputed_feature_names
+
+
 def _observation(fixture, sensor_id, time_index):
     return next(
         row

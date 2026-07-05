@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Iterator
 import math
@@ -37,6 +37,17 @@ class SyntheticTrafficFeatureMetadata:
 
 
 @dataclass(frozen=True)
+class SyntheticTrafficMissingnessReport:
+    observation_count: int
+    target_missing_count: int
+    target_missing_rate: float
+    current_missing_count: int
+    current_missing_rate: float
+    imputation_strategy: str
+    imputed_feature_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SyntheticTrafficSplit:
     sensors: tuple[str, ...]
     time_points: tuple[datetime, ...]
@@ -48,6 +59,13 @@ class SyntheticTrafficSplit:
     def __iter__(self) -> Iterator[SyntheticTrafficObservation]:
         return iter(self.observations)
 
+    def observed_target_observations(self) -> tuple[SyntheticTrafficObservation, ...]:
+        return tuple(
+            observation
+            for observation in self.observations
+            if not observation.target_missing
+        )
+
 
 @dataclass(frozen=True)
 class SyntheticTrafficFixture:
@@ -57,6 +75,66 @@ class SyntheticTrafficFixture:
     local_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
     neighbor_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
     observations: tuple[SyntheticTrafficObservation, ...]
+
+    def missingness_report(self) -> SyntheticTrafficMissingnessReport:
+        observation_count = len(self.observations)
+        target_missing_count = sum(
+            1 for observation in self.observations if observation.target_missing
+        )
+        current_missing_count = sum(
+            1 for observation in self.observations if observation.current_speed_missing
+        )
+        imputed_feature_names = _imputed_feature_names(
+            self.local_feature_metadata + self.neighbor_feature_metadata
+        )
+
+        return SyntheticTrafficMissingnessReport(
+            observation_count=observation_count,
+            target_missing_count=target_missing_count,
+            target_missing_rate=target_missing_count / observation_count,
+            current_missing_count=current_missing_count,
+            current_missing_rate=current_missing_count / observation_count,
+            imputation_strategy=(
+                "past_observed_lag" if imputed_feature_names else "none"
+            ),
+            imputed_feature_names=imputed_feature_names,
+        )
+
+    def with_past_lag_imputation(self) -> SyntheticTrafficFixture:
+        readings = {
+            (observation.sensor_id, observation.time_index): observation.current_speed
+            for observation in self.observations
+        }
+        incoming_edges_by_target = {
+            sensor_id: tuple(
+                edge for edge in self.adjacency if edge.target == sensor_id
+            )
+            for sensor_id in self.sensors
+        }
+
+        return replace(
+            self,
+            local_feature_metadata=_with_local_lag_imputation_metadata(
+                self.local_feature_metadata
+            ),
+            neighbor_feature_metadata=_with_neighbor_lag_imputation_metadata(
+                self.neighbor_feature_metadata
+            ),
+            observations=tuple(
+                replace(
+                    observation,
+                    local_covariates=_impute_local_lags_from_past(
+                        observation, readings
+                    ),
+                    neighbor_covariates=_impute_neighbor_lags_from_past(
+                        observation,
+                        readings,
+                        incoming_edges_by_target[observation.sensor_id],
+                    ),
+                )
+                for observation in self.observations
+            ),
+        )
 
     def temporal_split_observations(
         self,
@@ -136,6 +214,39 @@ NEIGHBOR_LAG_STEPS = (
     ("neighbor_lag_15m", 3),
     ("neighbor_lag_30m", 6),
     ("neighbor_lag_60m", 12),
+)
+
+
+LOCAL_LAG_STEPS = (
+    ("lag_5m", 1),
+    ("lag_10m", 2),
+    ("lag_15m", 3),
+    ("lag_30m", 6),
+    ("lag_60m", 12),
+)
+
+
+LOCAL_LAG_IMPUTATION_METADATA = tuple(
+    SyntheticTrafficFeatureMetadata(
+        f"{feature_name}_imputed",
+        "traffic_imputation",
+        "indicator",
+        "flag",
+        lag_steps * -5,
+    )
+    for feature_name, lag_steps in LOCAL_LAG_STEPS
+)
+
+
+NEIGHBOR_LAG_IMPUTATION_METADATA = tuple(
+    SyntheticTrafficFeatureMetadata(
+        f"{feature_name}_imputed",
+        "neighbor_traffic_imputation",
+        "indicator",
+        "flag",
+        lag_steps * -5,
+    )
+    for feature_name, lag_steps in NEIGHBOR_LAG_STEPS
 )
 
 
@@ -316,6 +427,120 @@ def _local_covariates(
         "day_of_week": float(timestamp.weekday()),
         "weekend": timestamp.weekday() >= 5,
     }
+
+
+def _impute_local_lags_from_past(
+    observation: SyntheticTrafficObservation,
+    readings: dict[tuple[str, int], float | None],
+) -> dict[str, float | bool | None]:
+    covariates = dict(observation.local_covariates)
+    for feature_name, lag_steps in LOCAL_LAG_STEPS:
+        imputed_name = f"{feature_name}_imputed"
+        original_value = covariates[feature_name]
+        if original_value is not None:
+            covariates[imputed_name] = False
+            continue
+        lag_index = observation.time_index - lag_steps
+        if lag_index < 0:
+            covariates[imputed_name] = False
+            continue
+        imputed_value = _previous_observed_reading(
+            readings, observation.sensor_id, lag_index
+        )
+        covariates[feature_name] = imputed_value
+        covariates[imputed_name] = imputed_value is not None
+    return covariates
+
+
+def _impute_neighbor_lags_from_past(
+    observation: SyntheticTrafficObservation,
+    readings: dict[tuple[str, int], float | None],
+    incoming_edges: tuple[SyntheticTrafficEdge, ...],
+) -> dict[str, float | bool | None]:
+    covariates = dict(observation.neighbor_covariates)
+    for feature_name, lag_steps in NEIGHBOR_LAG_STEPS:
+        imputed_name = f"{feature_name}_imputed"
+        original_value = covariates[feature_name]
+        if original_value is not None:
+            covariates[imputed_name] = False
+            continue
+        lag_index = observation.time_index - lag_steps
+        if lag_index < 0:
+            covariates[imputed_name] = False
+            continue
+        imputed_value = _weighted_previous_neighbor_average(
+            readings, incoming_edges, lag_index
+        )
+        covariates[feature_name] = imputed_value
+        covariates[imputed_name] = imputed_value is not None
+    return covariates
+
+
+def _weighted_previous_neighbor_average(
+    readings: dict[tuple[str, int], float | None],
+    incoming_edges: tuple[SyntheticTrafficEdge, ...],
+    latest_time_index: int,
+) -> float | None:
+    weighted_sum = 0.0
+    total_weight = 0.0
+    for edge in incoming_edges:
+        reading = _previous_observed_reading(
+            readings, edge.source, latest_time_index
+        )
+        if reading is None:
+            continue
+        weighted_sum += reading * edge.weight
+        total_weight += edge.weight
+
+    if total_weight == 0.0:
+        return None
+    return round(weighted_sum / total_weight, 3)
+
+
+def _with_local_lag_imputation_metadata(
+    metadata: tuple[SyntheticTrafficFeatureMetadata, ...],
+) -> tuple[SyntheticTrafficFeatureMetadata, ...]:
+    return _with_imputation_metadata(metadata, LOCAL_LAG_IMPUTATION_METADATA)
+
+
+def _with_neighbor_lag_imputation_metadata(
+    metadata: tuple[SyntheticTrafficFeatureMetadata, ...],
+) -> tuple[SyntheticTrafficFeatureMetadata, ...]:
+    return _with_imputation_metadata(metadata, NEIGHBOR_LAG_IMPUTATION_METADATA)
+
+
+def _with_imputation_metadata(
+    metadata: tuple[SyntheticTrafficFeatureMetadata, ...],
+    imputation_metadata: tuple[SyntheticTrafficFeatureMetadata, ...],
+) -> tuple[SyntheticTrafficFeatureMetadata, ...]:
+    names = {feature.name for feature in metadata}
+    return metadata + tuple(
+        feature
+        for feature in imputation_metadata
+        if feature.name not in names
+    )
+
+
+def _imputed_feature_names(
+    metadata: tuple[SyntheticTrafficFeatureMetadata, ...],
+) -> tuple[str, ...]:
+    return tuple(
+        feature.name.removesuffix("_imputed")
+        for feature in metadata
+        if feature.source.endswith("_imputation")
+    )
+
+
+def _previous_observed_reading(
+    readings: dict[tuple[str, int], float | None],
+    sensor_id: str,
+    latest_time_index: int,
+) -> float | None:
+    for time_index in range(latest_time_index, -1, -1):
+        reading = readings[(sensor_id, time_index)]
+        if reading is not None:
+            return reading
+    return None
 
 
 def _lag_reading(
