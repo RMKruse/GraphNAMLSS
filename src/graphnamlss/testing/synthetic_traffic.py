@@ -42,6 +42,7 @@ class SyntheticTrafficSplit:
     time_points: tuple[datetime, ...]
     adjacency: tuple[SyntheticTrafficEdge, ...]
     local_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
+    neighbor_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
     observations: tuple[SyntheticTrafficObservation, ...]
 
     def __iter__(self) -> Iterator[SyntheticTrafficObservation]:
@@ -54,6 +55,7 @@ class SyntheticTrafficFixture:
     time_points: tuple[datetime, ...]
     adjacency: tuple[SyntheticTrafficEdge, ...]
     local_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
+    neighbor_feature_metadata: tuple[SyntheticTrafficFeatureMetadata, ...]
     observations: tuple[SyntheticTrafficObservation, ...]
 
     def temporal_split_observations(
@@ -91,6 +93,7 @@ class SyntheticTrafficFixture:
                 ),
                 adjacency=self.adjacency,
                 local_feature_metadata=self.local_feature_metadata,
+                neighbor_feature_metadata=self.neighbor_feature_metadata,
                 observations=tuple(
                     sorted(
                         (
@@ -124,6 +127,79 @@ LOCAL_FEATURE_METADATA = (
     ),
     SyntheticTrafficFeatureMetadata("day_of_week", "calendar", "ordinal", "weekday", 0),
     SyntheticTrafficFeatureMetadata("weekend", "calendar", "indicator", "flag", 0),
+)
+
+
+NEIGHBOR_LAG_STEPS = (
+    ("neighbor_lag_5m", 1),
+    ("neighbor_lag_10m", 2),
+    ("neighbor_lag_15m", 3),
+    ("neighbor_lag_30m", 6),
+    ("neighbor_lag_60m", 12),
+)
+
+
+NEIGHBOR_FEATURE_METADATA = (
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_current_speed", "neighbor_traffic", "continuous", "speed", 0
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_current_speed_missing",
+        "neighbor_traffic_missingness",
+        "indicator",
+        "flag",
+        0,
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_5m", "neighbor_traffic_lag", "continuous", "speed", -5
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_5m_missing",
+        "neighbor_traffic_missingness",
+        "indicator",
+        "flag",
+        -5,
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_10m", "neighbor_traffic_lag", "continuous", "speed", -10
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_10m_missing",
+        "neighbor_traffic_missingness",
+        "indicator",
+        "flag",
+        -10,
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_15m", "neighbor_traffic_lag", "continuous", "speed", -15
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_15m_missing",
+        "neighbor_traffic_missingness",
+        "indicator",
+        "flag",
+        -15,
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_30m", "neighbor_traffic_lag", "continuous", "speed", -30
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_30m_missing",
+        "neighbor_traffic_missingness",
+        "indicator",
+        "flag",
+        -30,
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_60m", "neighbor_traffic_lag", "continuous", "speed", -60
+    ),
+    SyntheticTrafficFeatureMetadata(
+        "neighbor_lag_60m_missing",
+        "neighbor_traffic_missingness",
+        "indicator",
+        "flag",
+        -60,
+    ),
 )
 
 
@@ -175,6 +251,7 @@ def load_synthetic_traffic_fixture(seed: int = 20250214) -> SyntheticTrafficFixt
         time_points=time_points,
         adjacency=adjacency,
         local_feature_metadata=LOCAL_FEATURE_METADATA,
+        neighbor_feature_metadata=NEIGHBOR_FEATURE_METADATA,
         observations=tuple(observations),
     )
 
@@ -265,13 +342,17 @@ def _neighbor_covariates(
     current = _weighted_neighbor_average(
         speeds, incoming_edges, time_index, 0, current_missing
     )
-    lag_5m = _weighted_neighbor_average(speeds, incoming_edges, time_index, 1, current_missing)
-    return {
+    covariates: dict[str, float | bool | None] = {
         "neighbor_current_speed": current,
         "neighbor_current_speed_missing": current is None,
-        "neighbor_lag_5m": lag_5m,
-        "neighbor_lag_5m_missing": lag_5m is None,
     }
+    for feature_name, lag_steps in NEIGHBOR_LAG_STEPS:
+        value = _weighted_neighbor_average(
+            speeds, incoming_edges, time_index, lag_steps, current_missing
+        )
+        covariates[feature_name] = value
+        covariates[f"{feature_name}_missing"] = value is None
+    return covariates
 
 
 def _weighted_neighbor_average(

@@ -55,6 +55,38 @@ def test_synthetic_traffic_fixture_aligns_full_local_covariate_set_from_history(
     assert first_observation.local_covariates["lag_60m"] is None
 
 
+def test_synthetic_traffic_fixture_aligns_neighbor_covariates_from_graph_history():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    observation = _observation(fixture, "sensor_a", 12)
+    covariates = observation.neighbor_covariates
+
+    assert covariates["neighbor_current_speed"] == _observation(
+        fixture, "sensor_d", 12
+    ).current_speed
+    assert covariates["neighbor_lag_5m"] == _observation(
+        fixture, "sensor_d", 11
+    ).current_speed
+    assert covariates["neighbor_lag_10m"] == _observation(
+        fixture, "sensor_d", 10
+    ).current_speed
+    assert covariates["neighbor_lag_15m"] == _observation(
+        fixture, "sensor_d", 9
+    ).current_speed
+    assert covariates["neighbor_lag_30m"] == _observation(
+        fixture, "sensor_d", 6
+    ).current_speed
+    assert covariates["neighbor_lag_60m"] == _observation(
+        fixture, "sensor_d", 0
+    ).current_speed
+
+    assert not {"time_of_day", "day_of_week", "weekend"}.intersection(covariates)
+
+    first_observation = _observation(fixture, "sensor_a", 0)
+    assert first_observation.neighbor_covariates["neighbor_lag_5m"] is None
+    assert first_observation.neighbor_covariates["neighbor_lag_60m"] is None
+
+
 def test_synthetic_traffic_fixture_exposes_local_feature_metadata():
     fixture = load_synthetic_traffic_fixture(seed=7)
 
@@ -73,6 +105,27 @@ def test_synthetic_traffic_fixture_exposes_local_feature_metadata():
     assert metadata_by_name["time_of_day"].source == "calendar"
     assert metadata_by_name["time_of_day"].unit == "hour_of_day"
     assert metadata_by_name["weekend"].dtype == "indicator"
+
+
+def test_synthetic_traffic_fixture_exposes_neighbor_feature_metadata_without_calendar():
+    fixture = load_synthetic_traffic_fixture(seed=7)
+
+    observation = _observation(fixture, "sensor_a", 12)
+    metadata_by_name = {
+        feature.name: feature for feature in fixture.neighbor_feature_metadata
+    }
+
+    assert tuple(metadata_by_name) == tuple(observation.neighbor_covariates)
+    assert {feature.source for feature in metadata_by_name.values()} == {
+        "neighbor_traffic",
+        "neighbor_traffic_lag",
+        "neighbor_traffic_missingness",
+    }
+    assert metadata_by_name["neighbor_lag_60m"].source == "neighbor_traffic_lag"
+    assert metadata_by_name["neighbor_lag_60m"].offset_minutes == -60
+    assert "calendar" not in {
+        feature.source for feature in fixture.neighbor_feature_metadata
+    }
 
 
 def test_synthetic_traffic_fixture_is_deterministic_under_fixed_seed():
@@ -108,6 +161,7 @@ def test_synthetic_traffic_split_partitions_share_sensor_graph_metadata():
         assert partition.sensors == fixture.sensors
         assert partition.adjacency == fixture.adjacency
         assert partition.local_feature_metadata == fixture.local_feature_metadata
+        assert partition.neighbor_feature_metadata == fixture.neighbor_feature_metadata
 
     assert splits["train"].time_points == fixture.time_points[:8]
     assert splits["validation"].time_points == fixture.time_points[8:12]
