@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Iterator
 import math
 import random
@@ -314,7 +316,9 @@ NEIGHBOR_FEATURE_METADATA = (
 )
 
 
-def load_synthetic_traffic_fixture(seed: int = 20250214) -> SyntheticTrafficFixture:
+def load_synthetic_traffic_fixture(
+    seed: int = 20250214, adjacency_path: str | Path | None = None
+) -> SyntheticTrafficFixture:
     """Build tiny deterministic traffic test data, not a scientific benchmark."""
 
     rng = random.Random(seed)
@@ -322,10 +326,9 @@ def load_synthetic_traffic_fixture(seed: int = 20250214) -> SyntheticTrafficFixt
     start = datetime(2026, 1, 5, 7, 0)
     time_points = tuple(start + timedelta(minutes=5 * step) for step in range(16))
     adjacency = (
-        SyntheticTrafficEdge("sensor_a", "sensor_b", 0.8),
-        SyntheticTrafficEdge("sensor_b", "sensor_c", 0.6),
-        SyntheticTrafficEdge("sensor_c", "sensor_d", 0.7),
-        SyntheticTrafficEdge("sensor_d", "sensor_a", 0.4),
+        _load_dataset_provided_adjacency(adjacency_path, sensors)
+        if adjacency_path is not None
+        else _default_adjacency()
     )
 
     speeds = _speed_table(sensors, time_points, rng)
@@ -365,6 +368,48 @@ def load_synthetic_traffic_fixture(seed: int = 20250214) -> SyntheticTrafficFixt
         neighbor_feature_metadata=NEIGHBOR_FEATURE_METADATA,
         observations=tuple(observations),
     )
+
+
+def _default_adjacency() -> tuple[SyntheticTrafficEdge, ...]:
+    return (
+        SyntheticTrafficEdge("sensor_a", "sensor_b", 0.8),
+        SyntheticTrafficEdge("sensor_b", "sensor_c", 0.6),
+        SyntheticTrafficEdge("sensor_c", "sensor_d", 0.7),
+        SyntheticTrafficEdge("sensor_d", "sensor_a", 0.4),
+    )
+
+
+def _load_dataset_provided_adjacency(
+    adjacency_path: str | Path,
+    sensors: tuple[str, ...],
+) -> tuple[SyntheticTrafficEdge, ...]:
+    known_sensors = set(sensors)
+    with Path(adjacency_path).open(newline="") as adjacency_file:
+        rows = csv.DictReader(adjacency_file)
+        adjacency = tuple(_traffic_edge_from_row(row, known_sensors) for row in rows)
+    return adjacency
+
+
+def _traffic_edge_from_row(
+    row: dict[str, str],
+    known_sensors: set[str],
+) -> SyntheticTrafficEdge:
+    edge = SyntheticTrafficEdge(
+        source=row["source"],
+        target=row["target"],
+        weight=float(row["weight"]),
+    )
+    unknown_sensors = sorted(
+        sensor_id
+        for sensor_id in (edge.source, edge.target)
+        if sensor_id not in known_sensors
+    )
+    if unknown_sensors:
+        raise ValueError(
+            "Dataset-provided adjacency references unknown sensors: "
+            + ", ".join(unknown_sensors)
+        )
+    return edge
 
 
 def _speed_table(

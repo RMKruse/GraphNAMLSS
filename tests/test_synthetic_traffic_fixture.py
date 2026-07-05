@@ -1,3 +1,5 @@
+import pytest
+
 from graphnamlss.testing import load_synthetic_traffic_fixture
 
 
@@ -85,6 +87,44 @@ def test_synthetic_traffic_fixture_aligns_neighbor_covariates_from_graph_history
     first_observation = _observation(fixture, "sensor_a", 0)
     assert first_observation.neighbor_covariates["neighbor_lag_5m"] is None
     assert first_observation.neighbor_covariates["neighbor_lag_60m"] is None
+
+
+def test_synthetic_traffic_fixture_loads_dataset_provided_adjacency(tmp_path):
+    adjacency_path = tmp_path / "adjacency.csv"
+    adjacency_path.write_text(
+        "source,target,weight\n"
+        "sensor_b,sensor_a,0.25\n"
+        "sensor_c,sensor_a,0.75\n"
+        "sensor_a,sensor_d,1.0\n"
+    )
+
+    fixture = load_synthetic_traffic_fixture(seed=7, adjacency_path=adjacency_path)
+
+    assert [(edge.source, edge.target, edge.weight) for edge in fixture.adjacency] == [
+        ("sensor_b", "sensor_a", 0.25),
+        ("sensor_c", "sensor_a", 0.75),
+        ("sensor_a", "sensor_d", 1.0),
+    ]
+
+    observation = _observation(fixture, "sensor_a", 12)
+    sensor_b_speed = _observation(fixture, "sensor_b", 12).current_speed
+    sensor_c_speed = _observation(fixture, "sensor_c", 12).current_speed
+    expected_neighbor_speed = round((sensor_b_speed * 0.25 + sensor_c_speed * 0.75), 3)
+
+    assert observation.neighbor_covariates["neighbor_current_speed"] == (
+        expected_neighbor_speed
+    )
+
+
+def test_synthetic_traffic_fixture_rejects_adjacency_for_unknown_sensors(tmp_path):
+    adjacency_path = tmp_path / "adjacency.csv"
+    adjacency_path.write_text(
+        "source,target,weight\n"
+        "sensor_z,sensor_a,1.0\n"
+    )
+
+    with pytest.raises(ValueError, match="unknown sensors"):
+        load_synthetic_traffic_fixture(seed=7, adjacency_path=adjacency_path)
 
 
 def test_synthetic_traffic_fixture_exposes_local_feature_metadata():
