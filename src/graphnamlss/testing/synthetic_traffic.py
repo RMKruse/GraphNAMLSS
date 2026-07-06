@@ -4,7 +4,7 @@ import csv
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 import math
 import random
 
@@ -368,6 +368,21 @@ def load_synthetic_traffic_fixture(
         neighbor_feature_metadata=NEIGHBOR_FEATURE_METADATA,
         observations=tuple(observations),
     )
+
+
+def load_synthetic_traffic_fixture_from_config(
+    config: Any, seed: int = 20250214
+) -> SyntheticTrafficFixture:
+    adjacency_path = config.dataset.artifacts.get("adjacency")
+    fixture = load_synthetic_traffic_fixture(seed=seed, adjacency_path=adjacency_path)
+
+    if (
+        config.missingness is not None
+        and config.missingness.covariates == "past_observed_lag_imputation"
+    ):
+        return fixture.with_past_lag_imputation()
+
+    return fixture
 
 
 def _default_adjacency() -> tuple[SyntheticTrafficEdge, ...]:

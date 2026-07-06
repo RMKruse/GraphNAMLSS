@@ -8,6 +8,7 @@ from graphnamlss.testing.synthetic_traffic import (
     SyntheticTrafficObservation,
     SyntheticTrafficSplit,
     load_synthetic_traffic_fixture,
+    load_synthetic_traffic_fixture_from_config,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "SyntheticTrafficObservation",
     "SyntheticTrafficSplit",
     "load_synthetic_traffic_fixture",
+    "load_synthetic_traffic_fixture_from_config",
 ]
