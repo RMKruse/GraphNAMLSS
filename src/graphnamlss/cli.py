@@ -5,8 +5,13 @@ import json
 import sys
 from pathlib import Path
 
-from graphnamlss.config import ConfigError, load_experiment_config, validate_experiment_config
-from graphnamlss.training import train_deterministic_namlss_on_synthetic_traffic
+from graphnamlss.config import (
+    ConfigError,
+    load_experiment_config,
+    validate_experiment_artifacts,
+    validate_experiment_config,
+)
+from graphnamlss.training import train_deterministic_namlss_on_traffic
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,7 +69,8 @@ def _train(config_path: Path, *, seed: int) -> int:
     try:
         config = load_experiment_config(config_path)
         validate_experiment_config(config)
-        summary = train_deterministic_namlss_on_synthetic_traffic(config, seed=seed)
+        validate_experiment_artifacts(config)
+        summary = train_deterministic_namlss_on_traffic(config, seed=seed)
     except (ConfigError, ValueError) as exc:
         print(f"Training error: {exc}", file=sys.stderr)
         return 2

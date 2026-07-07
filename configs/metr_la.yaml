@@ -61,17 +61,17 @@ graph:
   edge_weight: dataset_provided_distance_kernel
   directed: true
 model:
-  family: GraphNAMLSS
-  variant: tracer_bullet
+  family: NAMLSS
+  variant: deterministic_local
   distribution: gaussian_location_scale
-  graph_representation: shared
-  graph_injection: additive_graph_contribution
-  graph_stream_self_feature_access: neighbor_focused
-  graph_encoder: graphsage
+  graph_representation: none
+  graph_injection: none
+  graph_stream_self_feature_access: none
+  graph_encoder: none
 optimizer:
-  name: adam
-  learning_rate: 0.001
+  name: deterministic_closed_form
+  learning_rate: 0.0
   max_epochs: 1
 output:
   directory: ../runs/metr-la-tracer
-  run_name: metr-la-tracer
+  run_name: deterministic-metr-la

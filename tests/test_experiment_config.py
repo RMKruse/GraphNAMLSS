@@ -23,7 +23,7 @@ def test_sample_tracer_bullet_config_loads_as_typed_experiment_config():
     assert config.output.run_name == "tracer-bullet-dry-run"
 
 
-def test_metr_la_config_resolves_tracer_dataset_contract():
+def test_metr_la_config_resolves_deterministic_baseline_contract():
     config = load_experiment_config("configs/metr_la.yaml")
     validate_experiment_config(config)
 
@@ -46,6 +46,15 @@ def test_metr_la_config_resolves_tracer_dataset_contract():
     assert resolved["scaling"]["mode"] == "train_period_standardization"
     assert resolved["missingness"]["target"] == "mask_missing_targets"
     assert resolved["missingness"]["covariates"] == "past_observed_lag_imputation"
+    assert resolved["model"] == {
+        "family": "NAMLSS",
+        "variant": "deterministic_local",
+        "distribution": "gaussian_location_scale",
+        "graph_representation": "none",
+        "graph_injection": "none",
+        "graph_stream_self_feature_access": "none",
+        "graph_encoder": "none",
+    }
     assert resolved["graph"] == {
         "source": "dataset_provided",
         "format": "dcrnn_adjacency_pickle",

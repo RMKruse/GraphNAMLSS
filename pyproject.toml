@@ -39,6 +39,10 @@ pyg = [
   "torch>=2.5",
   "torch-geometric>=2.6"
 ]
+traffic = [
+  "numpy>=1.26",
+  "pandas>=2.2"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

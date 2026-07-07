@@ -12,18 +12,36 @@ from graphnamlss.likelihood import positive_scale
 from graphnamlss.local_shape import CenteredLocalShapeFunctions
 from graphnamlss.metrics import GaussianMetricReport, gaussian_metric_report
 from graphnamlss.testing import load_synthetic_traffic_fixture_from_config
+from graphnamlss.traffic_data import load_metr_la_traffic_fixture_from_config
 from graphnamlss.traffic_scaling import TrafficScalingPolicy, fit_traffic_scaling_policy
 
 
-__all__ = ["train_deterministic_namlss_on_synthetic_traffic"]
+__all__ = [
+    "train_deterministic_namlss_on_synthetic_traffic",
+    "train_deterministic_namlss_on_traffic",
+]
+
+
+def train_deterministic_namlss_on_traffic(
+    config: ExperimentConfig, *, seed: int = 20250214
+) -> dict[str, Any]:
+    _validate_deterministic_traffic_training_config(config)
+
+    fixture = _load_traffic_fixture(config, seed=seed)
+    return _train_deterministic_namlss_on_fixture(config, fixture, seed=seed)
 
 
 def train_deterministic_namlss_on_synthetic_traffic(
     config: ExperimentConfig, *, seed: int = 20250214
 ) -> dict[str, Any]:
     _validate_synthetic_training_config(config)
-
     fixture = load_synthetic_traffic_fixture_from_config(config, seed=seed)
+    return _train_deterministic_namlss_on_fixture(config, fixture, seed=seed)
+
+
+def _train_deterministic_namlss_on_fixture(
+    config: ExperimentConfig, fixture: Any, *, seed: int
+) -> dict[str, Any]:
     splits = fixture.temporal_split_observations(
         train=config.split.train,
         validation=config.split.validation,
@@ -97,6 +115,16 @@ def train_deterministic_namlss_on_synthetic_traffic(
             "covariate_policy": config.missingness.covariates,
             "fixture": fixture.missingness_report().__dict__,
         },
+        "features": {
+            "local": list(config.features.local),
+            "neighbor": list(config.features.neighbor),
+            "local_metadata": [
+                feature.__dict__ for feature in fixture.local_feature_metadata
+            ],
+            "neighbor_metadata": [
+                feature.__dict__ for feature in fixture.neighbor_feature_metadata
+            ],
+        },
         "splits": split_summary,
         "training_history": history,
         "parameters": {
@@ -110,13 +138,33 @@ def train_deterministic_namlss_on_synthetic_traffic(
     return output
 
 
+def _validate_deterministic_traffic_training_config(config: ExperimentConfig) -> None:
+    if _is_synthetic_config(config):
+        _validate_synthetic_training_config(config)
+        return
+    if config.dataset.name != "METR-LA":
+        raise ConfigError(
+            "Deterministic NAMLSS training supports synthetic traffic and METR-LA."
+        )
+    _validate_shared_training_config(config)
+
+
 def _validate_synthetic_training_config(config: ExperimentConfig) -> None:
     if "synthetic" not in config.dataset.name.lower():
         raise ConfigError(
             "The train command currently supports the synthetic traffic fixture only."
         )
+    _validate_shared_training_config(config)
+
+
+def _validate_shared_training_config(config: ExperimentConfig) -> None:
     if config.model.distribution != "gaussian_location_scale":
         raise ConfigError("Deterministic NAMLSS training requires gaussian_location_scale.")
+    if config.model.family != "NAMLSS" or config.model.variant != "deterministic_local":
+        raise ConfigError(
+            "Deterministic NAMLSS training requires model.family=NAMLSS "
+            "and model.variant=deterministic_local."
+        )
     if config.missingness is None:
         raise ConfigError("Training requires an explicit traffic missingness policy.")
     if config.missingness.target != "mask_missing_targets":
@@ -130,6 +178,16 @@ def _validate_synthetic_training_config(config: ExperimentConfig) -> None:
         or config.scaling.fit_on != "train"
     ):
         raise ConfigError("Training requires train-period standardization.")
+
+
+def _load_traffic_fixture(config: ExperimentConfig, *, seed: int) -> Any:
+    if _is_synthetic_config(config):
+        return load_synthetic_traffic_fixture_from_config(config, seed=seed)
+    return load_metr_la_traffic_fixture_from_config(config)
+
+
+def _is_synthetic_config(config: ExperimentConfig) -> bool:
+    return "synthetic" in config.dataset.name.lower()
 
 
 def _feature_rows(
