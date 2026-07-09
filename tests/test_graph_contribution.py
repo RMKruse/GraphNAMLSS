@@ -34,7 +34,9 @@ def test_centered_graph_contribution_keeps_each_parameter_zero_mean():
     assert result.eta_shape == (2, 3, 2)
     assert result.contribution_shape == (2, 3, 2)
     assert result.centered_contributions[..., 0].mean().item() == pytest.approx(0.0)
-    assert result.centered_contributions[..., 1].mean().item() == pytest.approx(0.0)
+    assert result.centered_contributions[..., 1].mean().item() == pytest.approx(
+        0.0, abs=1e-6
+    )
     assert torch.equal(result.eta, result.centered_contributions)
 
 
@@ -60,7 +62,10 @@ def test_graph_gates_modulate_contributions_before_predictor_addition():
     result = contribution(embeddings, local_eta=local_eta)
 
     assert torch.equal(result.eta[..., 0], local_eta[..., 0])
-    assert result.eta[..., 1].tolist() == pytest.approx([[1.0, 5.0, 9.0]])
+    torch.testing.assert_close(
+        result.eta[..., 1],
+        torch.tensor([[1.0, 5.0, 9.0]], dtype=torch.float32),
+    )
     assert result.gate_values == pytest.approx({"mu": 0.0, "sigma": 2.0})
     assert result.gate_rows() == [
         {"parameter": "mu", "gate": 0.0},

@@ -11,16 +11,16 @@ GraphNAMLSS uses a plain `pyproject.toml` workflow with editable installs. It do
 From a clean checkout:
 
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-If your system exposes Python as `python3`, use `python3 -m venv .venv` for the first command.
+The repo includes `.python-version` with `3.12` so Python version managers use the PyTorch-compatible development runtime by default. If `python3.12` is not available, install Python 3.12 first rather than creating the environment with a newer interpreter.
 
-The initial scaffold keeps mandatory runtime dependencies minimal. PyYAML backs the Simple Experiment Config loader, and the `dev` extra installs the test runner used by the package skeleton.
+The mandatory runtime dependencies stay minimal for package imports. PyYAML backs the Simple Experiment Config loader, and the `dev` extra installs the test runner plus PyTorch so graph-model tests run in the standard development environment.
 
 ## Simple Experiment Config Dry Run
 
@@ -43,10 +43,10 @@ This fixture is test data, not a scientific benchmark. It exists to exercise spl
 PyTorch and PyTorch Geometric dependencies stay explicit. They are optional for the initial package import, but graph experiments should install the PyG extra in the project environment:
 
 ```bash
-python -m pip install -e ".[pyg]"
+python -m pip install -e ".[dev,pyg]"
 ```
 
-The plain dependency path expects `torch>=2.5` and `torch-geometric>=2.6`. If your platform needs a CPU- or CUDA-specific PyTorch wheel, install the matching PyTorch wheel first using the official PyTorch instructions, then install the editable PyG extra above. Record the exact Python, PyTorch, PyTorch Geometric, and accelerator versions with any experiment output.
+The plain development path uses Python 3.12 and expects `torch>=2.5`. The PyG path adds `torch-geometric>=2.6`. If your platform needs a CPU- or CUDA-specific PyTorch wheel, install the matching PyTorch wheel first using the official PyTorch instructions, then install the editable PyG extra above. Record the exact Python, PyTorch, PyTorch Geometric, and accelerator versions with any experiment output.
 
 The package is intentionally self-contained under `src/graphnamlss`. Reuse from existing NAMLSS or BANDS code should happen only through a narrow, documented external-code adapter boundary.
 

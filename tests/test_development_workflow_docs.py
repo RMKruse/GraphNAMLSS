@@ -8,7 +8,7 @@ def test_readme_documents_plain_pyproject_and_pyg_workflow():
     assert "python -m pip install -e \".[dev]\"" in readme
     assert "python -m pytest" in readme
     assert "PyTorch Geometric" in readme
-    assert "python -m pip install -e \".[pyg]\"" in readme
+    assert "python -m pip install -e \".[dev,pyg]\"" in readme
 
 
 def test_readme_documents_synthetic_traffic_fixture_as_test_data():

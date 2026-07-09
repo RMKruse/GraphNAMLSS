@@ -30,7 +30,9 @@ graphnamlss = "graphnamlss.cli:main"
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0"
+  "numpy>=1.26",
+  "pytest>=8.0",
+  "torch>=2.5"
 ]
 torch = [
   "torch>=2.5"

@@ -94,20 +94,28 @@ def _gaussian_nll_torch(*, mu: Any, sigma: Any, target: Any, mask: Any | None) -
     mu_tensor = torch.as_tensor(mu, dtype=dtype, device=device)
     sigma_tensor = torch.as_tensor(sigma, dtype=dtype, device=device)
     target_tensor = torch.as_tensor(target, dtype=dtype, device=device)
+    mu_tensor, sigma_tensor, target_tensor = torch.broadcast_tensors(
+        mu_tensor, sigma_tensor, target_tensor
+    )
+
+    observed_mu = mu_tensor
+    observed_sigma = sigma_tensor
+    observed_target = target_tensor
+    if mask is not None:
+        mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=device)
+        mask_tensor = torch.broadcast_to(mask_tensor, target_tensor.shape)
+        observed_mu = mu_tensor[mask_tensor]
+        observed_sigma = sigma_tensor[mask_tensor]
+        observed_target = target_tensor[mask_tensor]
+
+    if observed_target.numel() == 0:
+        raise ValueError("Gaussian NLL requires at least one observed target.")
 
     loss = (
         0.5 * math.log(2.0 * math.pi)
-        + torch.log(sigma_tensor)
-        + 0.5 * ((target_tensor - mu_tensor) / sigma_tensor) ** 2
+        + torch.log(observed_sigma)
+        + 0.5 * ((observed_target - observed_mu) / observed_sigma) ** 2
     )
-
-    if mask is not None:
-        mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=device)
-        mask_tensor = torch.broadcast_to(mask_tensor, loss.shape)
-        loss = loss[mask_tensor]
-
-    if loss.numel() == 0:
-        raise ValueError("Gaussian NLL requires at least one observed target.")
     if not bool(torch.isfinite(loss).all().item()):
         raise ValueError("Observed Gaussian NLL values must be finite.")
 
