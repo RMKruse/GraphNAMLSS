@@ -12,6 +12,11 @@ from graphnamlss.graph_encoder import (
     aggregate_neighbor_features,
 )
 from graphnamlss.local_shape import CenteredLocalShapeFunctions, LocalShapeResult
+from graphnamlss.statistical_baselines import (
+    StatisticalBaselineAdapterContract,
+    StatisticalBaselineAdapterInput,
+    StatisticalBaselinePrediction,
+)
 
 __version__ = version("graphnamlss")
 
@@ -24,6 +29,9 @@ __all__ = [
     "GraphMetadata",
     "LocalShapeResult",
     "PointGNNReference",
+    "StatisticalBaselineAdapterContract",
+    "StatisticalBaselineAdapterInput",
+    "StatisticalBaselinePrediction",
     "TracerBulletGraphEncoder",
     "__version__",
     "aggregate_neighbor_features",
