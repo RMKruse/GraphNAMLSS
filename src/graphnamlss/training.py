@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from graphnamlss.config import ConfigError, ExperimentConfig
+from graphnamlss.graph_encoder import GraphMetadata
 from graphnamlss.likelihood import positive_scale
 from graphnamlss.local_shape import CenteredLocalShapeFunctions
 from graphnamlss.metrics import GaussianMetricReport, gaussian_metric_report
@@ -17,9 +18,19 @@ from graphnamlss.traffic_scaling import TrafficScalingPolicy, fit_traffic_scalin
 
 
 __all__ = [
+    "train_namlss_on_traffic",
     "train_deterministic_namlss_on_synthetic_traffic",
     "train_deterministic_namlss_on_traffic",
+    "train_tracer_bullet_graph_namlss_on_traffic",
 ]
+
+
+def train_namlss_on_traffic(
+    config: ExperimentConfig, *, seed: int = 20250214
+) -> dict[str, Any]:
+    if _is_tracer_bullet_graph_config(config):
+        return train_tracer_bullet_graph_namlss_on_traffic(config, seed=seed)
+    return train_deterministic_namlss_on_traffic(config, seed=seed)
 
 
 def train_deterministic_namlss_on_traffic(
@@ -39,36 +50,25 @@ def train_deterministic_namlss_on_synthetic_traffic(
     return _train_deterministic_namlss_on_fixture(config, fixture, seed=seed)
 
 
+def train_tracer_bullet_graph_namlss_on_traffic(
+    config: ExperimentConfig, *, seed: int = 20250214
+) -> dict[str, Any]:
+    _validate_tracer_bullet_graph_training_config(config)
+    fixture = _load_traffic_fixture(config, seed=seed)
+    return _train_tracer_bullet_graph_namlss_on_fixture(config, fixture, seed=seed)
+
+
 def _train_deterministic_namlss_on_fixture(
     config: ExperimentConfig, fixture: Any, *, seed: int
 ) -> dict[str, Any]:
-    splits = fixture.temporal_split_observations(
-        train=config.split.train,
-        validation=config.split.validation,
-        test=config.split.test,
-    )
-
-    scaling_policy = fit_traffic_scaling_policy(splits["train"])
-    scaled_splits = {
-        split_name: scaling_policy.transform_split(split)
-        for split_name, split in splits.items()
-    }
-
-    feature_names = config.features.local
-    train_rows = _feature_rows(scaled_splits["train"].observations, feature_names)
-    observed_train = _observed_training_examples(
-        scaled_splits["train"].observations, feature_names
-    )
-    feature_centers = _feature_centers(train_rows, feature_names)
-    intercept, weights = _fit_linear_location(observed_train, feature_centers)
-    sigma = _training_sigma(observed_train, feature_centers, intercept, weights)
-
-    model = _local_shape_model(
-        feature_names=feature_names,
-        intercept=intercept,
-        weights=weights,
-        sigma=sigma,
-    ).fit_reference(train_rows)
+    prepared = _prepare_deterministic_local_training(config, fixture)
+    scaled_splits = prepared["scaled_splits"]
+    feature_names = prepared["feature_names"]
+    scaling_policy = prepared["scaling_policy"]
+    model = prepared["model"]
+    intercept = prepared["intercept"]
+    weights = prepared["weights"]
+    sigma = prepared["sigma"]
 
     predictions = {
         split_name: _predict_split(model, split.observations, feature_names)
@@ -138,6 +138,185 @@ def _train_deterministic_namlss_on_fixture(
     return output
 
 
+def _train_tracer_bullet_graph_namlss_on_fixture(
+    config: ExperimentConfig, fixture: Any, *, seed: int
+) -> dict[str, Any]:
+    prepared = _prepare_deterministic_local_training(config, fixture)
+    scaled_splits = prepared["scaled_splits"]
+    feature_names = prepared["feature_names"]
+    scaling_policy = prepared["scaling_policy"]
+    model = prepared["model"]
+    intercept = prepared["intercept"]
+    weights = prepared["weights"]
+    sigma = prepared["sigma"]
+
+    local_results = {
+        split_name: model.predict(_feature_rows(split.observations, feature_names))
+        for split_name, split in scaled_splits.items()
+    }
+    graph_state = _fit_tracer_bullet_graph_state(
+        config,
+        scaled_splits["train"].observations,
+        fixture,
+        local_results["train"].eta,
+    )
+    graph_results = {
+        split_name: _graph_contribution_for_split(
+            graph_state,
+            split_name=split_name,
+            observations=split.observations,
+            local_eta=local_results[split_name].eta,
+        )
+        for split_name, split in scaled_splits.items()
+    }
+    predictions = {
+        split_name: _prediction_from_eta(graph_results[split_name]["eta"])
+        for split_name in scaled_splits
+    }
+    metrics = {
+        split_name: _metrics_for_split(predictions[split_name], split.observations)
+        for split_name, split in scaled_splits.items()
+    }
+
+    resolved = config.to_resolved_dict()
+    resolved["train"] = True
+    resolved["training_seed"] = seed
+
+    loss = {split_name: report.nll for split_name, report in metrics.items()}
+    history = [
+        {
+            "epoch": epoch,
+            "loss": loss["train"],
+            "optimizer": config.optimizer.name,
+        }
+        for epoch in range(1, config.optimizer.max_epochs + 1)
+    ]
+    split_summary = {
+        split_name: _split_summary(split.observations)
+        for split_name, split in scaled_splits.items()
+    }
+    graph_gates = _graph_gate_rows(graph_state)
+    graph_contributions = {
+        "parameter_names": list(graph_state["parameter_names"]),
+        "splits": {
+            split_name: graph_results[split_name]["rows"]
+            for split_name in scaled_splits
+        },
+    }
+
+    output = {
+        "run_name": config.output.run_name,
+        "model": {
+            "family": config.model.family,
+            "variant": config.model.variant,
+            "distribution": config.model.distribution,
+        },
+        "loss": loss,
+        "metrics": {
+            split_name: _metric_report_dict(report)
+            for split_name, report in metrics.items()
+        },
+        "resolved_config": resolved,
+        "scaling": _scaling_summary(config, scaling_policy),
+        "missingness": {
+            "target_policy": config.missingness.target,
+            "covariate_policy": config.missingness.covariates,
+            "fixture": fixture.missingness_report().__dict__,
+        },
+        "features": {
+            "local": list(config.features.local),
+            "neighbor": list(config.features.neighbor),
+            "local_metadata": [
+                feature.__dict__ for feature in fixture.local_feature_metadata
+            ],
+            "neighbor_metadata": [
+                feature.__dict__ for feature in fixture.neighbor_feature_metadata
+            ],
+        },
+        "graph": {
+            "representation": config.model.graph_representation,
+            "encoder": config.model.graph_encoder,
+            "injection": config.model.graph_injection,
+            "self_feature_access": config.model.graph_stream_self_feature_access,
+            "node_count": len(fixture.sensors),
+            "edge_count": len(fixture.adjacency),
+            "feature_names": list(graph_state["feature_names"]),
+            "embedding_dim": graph_state["embedding_dim"],
+            "gate_artifact": "graph_gates.json",
+            "contribution_artifact": "graph_contributions.json",
+        },
+        "splits": split_summary,
+        "training_history": history,
+        "parameters": {
+            "intercept_mu": intercept,
+            "weights_mu": dict(zip(feature_names, weights, strict=True)),
+            "sigma": sigma,
+            "graph_weights_mu": dict(
+                zip(
+                    graph_state["embedding_names"],
+                    graph_state["graph_weights_mu"],
+                    strict=True,
+                )
+            ),
+            "graph_weights_sigma": dict(
+                zip(
+                    graph_state["embedding_names"],
+                    graph_state["graph_weights_sigma"],
+                    strict=True,
+                )
+            ),
+        },
+    }
+
+    _write_training_artifacts(config.output.directory, resolved, output)
+    _write_json(config.output.directory / "graph_gates.json", graph_gates)
+    _write_json(
+        config.output.directory / "graph_contributions.json", graph_contributions
+    )
+    return output
+
+
+def _prepare_deterministic_local_training(
+    config: ExperimentConfig, fixture: Any
+) -> dict[str, Any]:
+    splits = fixture.temporal_split_observations(
+        train=config.split.train,
+        validation=config.split.validation,
+        test=config.split.test,
+    )
+
+    scaling_policy = fit_traffic_scaling_policy(splits["train"])
+    scaled_splits = {
+        split_name: scaling_policy.transform_split(split)
+        for split_name, split in splits.items()
+    }
+
+    feature_names = config.features.local
+    train_rows = _feature_rows(scaled_splits["train"].observations, feature_names)
+    observed_train = _observed_training_examples(
+        scaled_splits["train"].observations, feature_names
+    )
+    feature_centers = _feature_centers(train_rows, feature_names)
+    intercept, weights = _fit_linear_location(observed_train, feature_centers)
+    sigma = _training_sigma(observed_train, feature_centers, intercept, weights)
+    model = _local_shape_model(
+        feature_names=feature_names,
+        intercept=intercept,
+        weights=weights,
+        sigma=sigma,
+    ).fit_reference(train_rows)
+
+    return {
+        "scaled_splits": scaled_splits,
+        "scaling_policy": scaling_policy,
+        "feature_names": feature_names,
+        "model": model,
+        "intercept": intercept,
+        "weights": weights,
+        "sigma": sigma,
+    }
+
+
 def _validate_deterministic_traffic_training_config(config: ExperimentConfig) -> None:
     if _is_synthetic_config(config):
         _validate_synthetic_training_config(config)
@@ -160,11 +339,43 @@ def _validate_synthetic_training_config(config: ExperimentConfig) -> None:
 def _validate_shared_training_config(config: ExperimentConfig) -> None:
     if config.model.distribution != "gaussian_location_scale":
         raise ConfigError("Deterministic NAMLSS training requires gaussian_location_scale.")
+    _validate_deterministic_model_config(config)
+    _validate_traffic_policy_config(config)
+
+
+def _validate_tracer_bullet_graph_training_config(config: ExperimentConfig) -> None:
+    if not _is_synthetic_config(config) and config.dataset.name != "METR-LA":
+        raise ConfigError(
+            "Tracer-bullet GraphNAMLSS training supports synthetic traffic and METR-LA."
+        )
+    if config.model.distribution != "gaussian_location_scale":
+        raise ConfigError("Tracer-bullet GraphNAMLSS training requires gaussian_location_scale.")
+    if not _is_tracer_bullet_graph_config(config):
+        raise ConfigError(
+            "Tracer-bullet GraphNAMLSS training requires model.family=GraphNAMLSS, "
+            "model.variant=tracer_bullet, graph_representation=shared, "
+            "graph_injection=additive_graph_contribution, "
+            "graph_stream_self_feature_access=neighbor_focused, and "
+            "graph_encoder=graphsage."
+        )
+    if config.graph is None:
+        raise ConfigError("Tracer-bullet GraphNAMLSS training requires graph metadata.")
+    if not config.features.neighbor:
+        raise ConfigError(
+            "Tracer-bullet GraphNAMLSS training requires neighbor graph features."
+        )
+    _validate_traffic_policy_config(config)
+
+
+def _validate_deterministic_model_config(config: ExperimentConfig) -> None:
     if config.model.family != "NAMLSS" or config.model.variant != "deterministic_local":
         raise ConfigError(
             "Deterministic NAMLSS training requires model.family=NAMLSS "
             "and model.variant=deterministic_local."
         )
+
+
+def _validate_traffic_policy_config(config: ExperimentConfig) -> None:
     if config.missingness is None:
         raise ConfigError("Training requires an explicit traffic missingness policy.")
     if config.missingness.target != "mask_missing_targets":
@@ -178,6 +389,17 @@ def _validate_shared_training_config(config: ExperimentConfig) -> None:
         or config.scaling.fit_on != "train"
     ):
         raise ConfigError("Training requires train-period standardization.")
+
+
+def _is_tracer_bullet_graph_config(config: ExperimentConfig) -> bool:
+    return (
+        config.model.family == "GraphNAMLSS"
+        and config.model.variant == "tracer_bullet"
+        and config.model.graph_representation == "shared"
+        and config.model.graph_injection == "additive_graph_contribution"
+        and config.model.graph_stream_self_feature_access == "neighbor_focused"
+        and config.model.graph_encoder == "graphsage"
+    )
 
 
 def _load_traffic_fixture(config: ExperimentConfig, *, seed: int) -> Any:
@@ -357,6 +579,224 @@ def _linear_shape(weight: float):
 
 def _constant_zero(_value: float) -> float:
     return 0.0
+
+
+def _fit_tracer_bullet_graph_state(
+    config: ExperimentConfig,
+    train_observations: Sequence[Any],
+    fixture: Any,
+    local_eta: Sequence[Sequence[float]],
+) -> dict[str, Any]:
+    feature_names = tuple(config.features.neighbor)
+    metadata = GraphMetadata.from_edges(
+        node_ids=fixture.sensors,
+        edges=fixture.adjacency,
+        use_edge_weights=True,
+    )
+    train_embeddings = _graph_embeddings_by_observation(
+        train_observations,
+        feature_names=feature_names,
+        metadata=metadata,
+    )
+    embedding_centers = _embedding_centers(train_embeddings.values(), feature_names)
+    graph_examples = tuple(
+        (
+            _center_embedding(
+                train_embeddings[(observation.sensor_id, observation.time_index)],
+                embedding_centers,
+            ),
+            float(observation.target_speed) - float(eta_row[0]),
+        )
+        for observation, eta_row in zip(train_observations, local_eta, strict=True)
+        if not observation.target_missing and observation.target_speed is not None
+    )
+    if not graph_examples:
+        raise ConfigError("GraphNAMLSS training requires observed training targets.")
+
+    graph_weights_mu = _fit_graph_residual_weights(graph_examples, feature_names)
+    return {
+        "metadata": metadata,
+        "feature_names": feature_names,
+        "embedding_names": feature_names,
+        "embedding_dim": len(feature_names),
+        "embedding_centers": embedding_centers,
+        "graph_weights_mu": graph_weights_mu,
+        "graph_weights_sigma": (0.0,) * len(feature_names),
+        "gates": {"mu": 1.0, "sigma": 1.0},
+        "parameter_names": ("mu", "sigma"),
+    }
+
+
+def _graph_contribution_for_split(
+    graph_state: Mapping[str, Any],
+    *,
+    split_name: str,
+    observations: Sequence[Any],
+    local_eta: Sequence[Sequence[float]],
+) -> dict[str, Any]:
+    embeddings = _graph_embeddings_by_observation(
+        observations,
+        feature_names=graph_state["feature_names"],
+        metadata=graph_state["metadata"],
+    )
+    raw_rows = []
+    for observation in observations:
+        centered_embedding = _center_embedding(
+            embeddings[(observation.sensor_id, observation.time_index)],
+            graph_state["embedding_centers"],
+        )
+        raw_rows.append(
+            (
+                _dot(graph_state["graph_weights_mu"], centered_embedding),
+                _dot(graph_state["graph_weights_sigma"], centered_embedding),
+            )
+        )
+
+    centers = tuple(
+        sum(row[index] for row in raw_rows) / len(raw_rows)
+        for index in range(len(graph_state["parameter_names"]))
+    )
+    rows = []
+    eta = []
+    for observation, eta_row, raw_row in zip(
+        observations, local_eta, raw_rows, strict=True
+    ):
+        centered_mu = raw_row[0] - centers[0]
+        centered_sigma = raw_row[1] - centers[1]
+        gated_mu = centered_mu * graph_state["gates"]["mu"]
+        gated_sigma = centered_sigma * graph_state["gates"]["sigma"]
+        eta.append((float(eta_row[0]) + gated_mu, float(eta_row[1]) + gated_sigma))
+        rows.append(
+            {
+                "split": split_name,
+                "sensor_id": observation.sensor_id,
+                "time_index": observation.time_index,
+                "mu": centered_mu,
+                "sigma": centered_sigma,
+                "gated_mu": gated_mu,
+                "gated_sigma": gated_sigma,
+            }
+        )
+
+    return {"eta": tuple(eta), "rows": rows}
+
+
+def _graph_embeddings_by_observation(
+    observations: Sequence[Any],
+    *,
+    feature_names: Sequence[str],
+    metadata: GraphMetadata,
+) -> dict[tuple[str, int], tuple[float, ...]]:
+    observations_by_key = {
+        (observation.sensor_id, observation.time_index): observation
+        for observation in observations
+    }
+    embeddings: dict[tuple[str, int], tuple[float, ...]] = {}
+    for time_index in sorted({observation.time_index for observation in observations}):
+        node_features = tuple(
+            tuple(
+                _feature_value(
+                    observations_by_key[(sensor_id, time_index)].neighbor_covariates.get(
+                        feature_name
+                    ),
+                    feature_name,
+                )
+                for feature_name in feature_names
+            )
+            for sensor_id in metadata.node_ids
+        )
+        neighbor_summary = _aggregate_graph_feature_rows(node_features, metadata)
+        for sensor_id, self_features, neighbor_features in zip(
+            metadata.node_ids, node_features, neighbor_summary, strict=True
+        ):
+            embeddings[(sensor_id, time_index)] = tuple(
+                max(0.0, 0.5 * self_value + 0.5 * neighbor_value)
+                for self_value, neighbor_value in zip(
+                    self_features, neighbor_features, strict=True
+                )
+            )
+    return embeddings
+
+
+def _aggregate_graph_feature_rows(
+    node_features: Sequence[Sequence[float]], metadata: GraphMetadata
+) -> tuple[tuple[float, ...], ...]:
+    feature_count = len(node_features[0])
+    aggregated = [[0.0] * feature_count for _node_id in metadata.node_ids]
+    denominator = [0.0] * len(metadata.node_ids)
+    weights = metadata.edge_weight or (1.0,) * len(metadata.edge_index)
+    for (source_index, target_index), weight in zip(
+        metadata.edge_index, weights, strict=True
+    ):
+        for feature_index, value in enumerate(node_features[source_index]):
+            aggregated[target_index][feature_index] += value * weight
+        denominator[target_index] += weight
+
+    return tuple(
+        tuple(
+            0.0 if denominator[node_index] == 0.0 else value / denominator[node_index]
+            for value in feature_values
+        )
+        for node_index, feature_values in enumerate(aggregated)
+    )
+
+
+def _embedding_centers(
+    embeddings: Iterable[Sequence[float]], feature_names: Sequence[str]
+) -> tuple[float, ...]:
+    rows = tuple(embeddings)
+    if not rows:
+        raise ConfigError("GraphNAMLSS training requires graph embeddings.")
+    return tuple(
+        sum(row[index] for row in rows) / len(rows)
+        for index, _name in enumerate(feature_names)
+    )
+
+
+def _center_embedding(
+    embedding: Sequence[float], centers: Sequence[float]
+) -> tuple[float, ...]:
+    return tuple(
+        value - center for value, center in zip(embedding, centers, strict=True)
+    )
+
+
+def _fit_graph_residual_weights(
+    examples: Sequence[tuple[Sequence[float], float]], feature_names: Sequence[str]
+) -> tuple[float, ...]:
+    x_rows = [row for row, _target in examples]
+    targets = [target for _row, target in examples]
+    matrix = [[0.0 for _ in feature_names] for _ in feature_names]
+    rhs = [0.0 for _ in feature_names]
+
+    for x_row, target in zip(x_rows, targets, strict=True):
+        for row_index, row_value in enumerate(x_row):
+            rhs[row_index] += row_value * target
+            for column_index, column_value in enumerate(x_row):
+                matrix[row_index][column_index] += row_value * column_value
+
+    for index in range(len(feature_names)):
+        matrix[index][index] += 1e-6
+
+    return _solve_linear_system(matrix, rhs)
+
+
+def _dot(weights: Sequence[float], values: Sequence[float]) -> float:
+    return sum(weight * value for weight, value in zip(weights, values, strict=True))
+
+
+def _prediction_from_eta(eta: Sequence[Sequence[float]]) -> dict[str, tuple[float, ...]]:
+    return {
+        "mu": tuple(float(row[0]) for row in eta),
+        "sigma": tuple(float(positive_scale(row[1])) for row in eta),
+    }
+
+
+def _graph_gate_rows(graph_state: Mapping[str, Any]) -> list[dict[str, float | str]]:
+    return [
+        {"parameter": parameter_name, "gate": graph_state["gates"][parameter_name]}
+        for parameter_name in graph_state["parameter_names"]
+    ]
 
 
 def _inverse_softplus(value: float) -> float:
