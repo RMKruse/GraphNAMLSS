@@ -127,6 +127,24 @@ sigma = softplus(eta_sigma) + epsilon
 
 The traffic benchmark starts with METR-LA and then replicates on PEMS-BAY.
 
+### METR-LA Merit Probe Evidence Contract
+
+The METR-LA Merit Probe is the first real-data evidence gate after the Concept
+Demonstrator. Its machine-readable contract lives at
+`configs/metr_la_merit_probe.yaml` and is validated by
+`load_merit_probe_evidence_contract`.
+
+The primary comparison is deterministic NAMLSS versus Tracer-Bullet GraphNAMLSS.
+Distributional GNN is secondary distributional context; Point GNN is a
+point-accuracy guardrail rather than a distributional peer. The
+Further-Investment Gate looks first for an NLL or CRPS signal while treating
+coverage, PIT, MAE, and RMSE as guardrails.
+
+If that signal is unclear, the next step is diagnosis—not PEMS-BAY replication,
+the full Primary Experiment Matrix, Bayesian graph streams, or medical
+applications. PEMS-BAY becomes the Replication Gate only after a promising
+METR-LA Merit Probe.
+
 ### PEMS-BAY Replication Dataset
 
 The PEMS-BAY replication config lives at `configs/pems_bay.yaml` and uses the

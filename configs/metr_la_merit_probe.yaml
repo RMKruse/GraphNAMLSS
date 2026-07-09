@@ -1,0 +1,37 @@
+stage: first_real_data_evidence_gate
+dataset: metr_la
+primary_comparison:
+  reference_model: deterministic_namlss
+  candidate_model: tracer_bullet_graph_namlss
+secondary_context:
+  - model: distributional_gnn_baseline
+    role: distributional_secondary_context
+  - model: point_gnn_reference
+    role: point_accuracy_guardrail
+further_investment_gate:
+  preferred_distributional_signals:
+    - nll
+    - crps
+  guardrail_metrics:
+    - coverage
+    - pit
+    - mae
+    - rmse
+failure_rule:
+  next_step: diagnose
+  diagnostic_areas:
+    - data
+    - baseline
+    - fitting_method
+    - graph_stream
+    - scale_predictor
+    - horizon_choice
+  blocked_expansions:
+    - pems_bay_replication
+    - primary_experiment_matrix
+    - bayesian_graph_streams
+    - medical_applications
+replication_gate:
+  dataset: pems_bay
+  after: promising_metr_la_merit_probe
+  purpose: test_generalization
