@@ -11,6 +11,7 @@ from graphnamlss.config import (
     validate_experiment_artifacts,
     validate_experiment_config,
 )
+from graphnamlss.report import generate_tracer_bullet_evaluation_report
 from graphnamlss.training import train_namlss_on_traffic
 
 
@@ -34,12 +35,30 @@ def main(argv: list[str] | None = None) -> int:
         help="Synthetic traffic fixture seed.",
     )
 
+    report_parser = subparsers.add_parser(
+        "report",
+        help="Generate the Tracer-Bullet Evaluation Report from saved run artifacts.",
+    )
+    report_parser.add_argument("--deterministic-run", required=True)
+    report_parser.add_argument("--graph-run", required=True)
+    report_parser.add_argument("--distributional-gnn-run", required=True)
+    report_parser.add_argument("--point-gnn-run", required=True)
+    report_parser.add_argument("--output", required=True)
+
     args = parser.parse_args(argv)
 
     if args.command == "dry-run":
         return _dry_run(Path(args.config))
     if args.command == "train":
         return _train(Path(args.config), seed=args.seed)
+    if args.command == "report":
+        return _report(
+            deterministic_run=Path(args.deterministic_run),
+            graph_run=Path(args.graph_run),
+            distributional_gnn_run=Path(args.distributional_gnn_run),
+            point_gnn_run=Path(args.point_gnn_run),
+            output_directory=Path(args.output),
+        )
 
     parser.error(f"Unknown command: {args.command}")
     return 2
@@ -76,6 +95,30 @@ def _train(config_path: Path, *, seed: int) -> int:
         return 2
 
     print(json.dumps(_emitted_training_summary(summary), indent=2, sort_keys=True))
+    return 0
+
+
+def _report(
+    *,
+    deterministic_run: Path,
+    graph_run: Path,
+    distributional_gnn_run: Path,
+    point_gnn_run: Path,
+    output_directory: Path,
+) -> int:
+    try:
+        summary = generate_tracer_bullet_evaluation_report(
+            deterministic_run=deterministic_run,
+            graph_run=graph_run,
+            distributional_gnn_run=distributional_gnn_run,
+            point_gnn_run=point_gnn_run,
+            output_directory=output_directory,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"Report error: {exc}", file=sys.stderr)
+        return 2
+
+    print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 
 
