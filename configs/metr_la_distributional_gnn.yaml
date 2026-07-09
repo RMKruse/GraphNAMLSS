@@ -1,0 +1,77 @@
+dataset:
+  name: METR-LA
+  task: fifteen_minute_ahead_speed
+  adjacency: dataset_provided
+  artifacts:
+    readings: ../data/raw/metr-la/metr-la.h5
+    adjacency: ../data/raw/metr-la/adj_mx.pkl
+split:
+  strategy: temporal
+  train: 0.7
+  validation: 0.1
+  test: 0.2
+temporal:
+  frequency_minutes: 5
+  horizon_minutes: 15
+  horizon_steps: 3
+  lag_minutes:
+    - 0
+    - 5
+    - 10
+    - 15
+    - 30
+    - 60
+features:
+  local:
+    - current_speed
+    - current_speed_missing
+    - lag_5m
+    - lag_10m
+    - lag_15m
+    - lag_30m
+    - lag_60m
+    - time_of_day
+    - day_of_week
+    - weekend
+  neighbor:
+    - neighbor_current_speed
+    - neighbor_current_speed_missing
+    - neighbor_lag_5m
+    - neighbor_lag_5m_missing
+    - neighbor_lag_10m
+    - neighbor_lag_10m_missing
+    - neighbor_lag_15m
+    - neighbor_lag_15m_missing
+    - neighbor_lag_30m
+    - neighbor_lag_30m_missing
+    - neighbor_lag_60m
+    - neighbor_lag_60m_missing
+missingness:
+  target: mask_missing_targets
+  covariates: past_observed_lag_imputation
+  future_looking_imputation: false
+scaling:
+  mode: train_period_standardization
+  fit_on: train
+  target: standardize
+  features: standardize_continuous
+graph:
+  source: dataset_provided
+  format: dcrnn_adjacency_pickle
+  edge_weight: dataset_provided_distance_kernel
+  directed: true
+model:
+  family: DistributionalGNN
+  variant: baseline
+  distribution: gaussian_location_scale
+  graph_representation: shared
+  graph_injection: direct_distributional_parameters
+  graph_stream_self_feature_access: neighbor_focused
+  graph_encoder: graphsage
+optimizer:
+  name: adam
+  learning_rate: 0.001
+  max_epochs: 1
+output:
+  directory: ../runs/metr-la-distributional-gnn
+  run_name: distributional-gnn-metr-la

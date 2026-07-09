@@ -63,6 +63,30 @@ def test_metr_la_config_resolves_deterministic_baseline_contract():
     }
 
 
+def test_metr_la_distributional_gnn_config_resolves_baseline_contract():
+    config = load_experiment_config("configs/metr_la_distributional_gnn.yaml")
+    validate_experiment_config(config)
+
+    resolved = config.to_resolved_dict()
+
+    assert resolved["dataset"]["name"] == "METR-LA"
+    assert resolved["model"] == {
+        "family": "DistributionalGNN",
+        "variant": "baseline",
+        "distribution": "gaussian_location_scale",
+        "graph_representation": "shared",
+        "graph_injection": "direct_distributional_parameters",
+        "graph_stream_self_feature_access": "neighbor_focused",
+        "graph_encoder": "graphsage",
+    }
+    assert resolved["graph"] == {
+        "source": "dataset_provided",
+        "format": "dcrnn_adjacency_pickle",
+        "edge_weight": "dataset_provided_distance_kernel",
+        "directed": True,
+    }
+
+
 def test_metr_la_config_reports_missing_required_artifacts():
     config = load_experiment_config("configs/metr_la.yaml")
 

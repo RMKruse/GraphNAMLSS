@@ -1,5 +1,6 @@
 from importlib.metadata import version
 
+from graphnamlss.distributional_gnn import DistributionalGNNBaseline
 from graphnamlss.graph_contribution import (
     CenteredGraphContribution,
     GraphContributionResult,
@@ -17,6 +18,7 @@ __version__ = version("graphnamlss")
 __all__ = [
     "CenteredGraphContribution",
     "CenteredLocalShapeFunctions",
+    "DistributionalGNNBaseline",
     "GraphContributionResult",
     "GraphEncoderInput",
     "GraphMetadata",

@@ -22,12 +22,15 @@ __all__ = [
     "train_deterministic_namlss_on_synthetic_traffic",
     "train_deterministic_namlss_on_traffic",
     "train_tracer_bullet_graph_namlss_on_traffic",
+    "train_distributional_gnn_baseline_on_traffic",
 ]
 
 
 def train_namlss_on_traffic(
     config: ExperimentConfig, *, seed: int = 20250214
 ) -> dict[str, Any]:
+    if _is_distributional_gnn_baseline_config(config):
+        return train_distributional_gnn_baseline_on_traffic(config, seed=seed)
     if _is_tracer_bullet_graph_config(config):
         return train_tracer_bullet_graph_namlss_on_traffic(config, seed=seed)
     return train_deterministic_namlss_on_traffic(config, seed=seed)
@@ -56,6 +59,14 @@ def train_tracer_bullet_graph_namlss_on_traffic(
     _validate_tracer_bullet_graph_training_config(config)
     fixture = _load_traffic_fixture(config, seed=seed)
     return _train_tracer_bullet_graph_namlss_on_fixture(config, fixture, seed=seed)
+
+
+def train_distributional_gnn_baseline_on_traffic(
+    config: ExperimentConfig, *, seed: int = 20250214
+) -> dict[str, Any]:
+    _validate_distributional_gnn_training_config(config)
+    fixture = _load_traffic_fixture(config, seed=seed)
+    return _train_distributional_gnn_baseline_on_fixture(config, fixture, seed=seed)
 
 
 def _train_deterministic_namlss_on_fixture(
@@ -131,6 +142,121 @@ def _train_deterministic_namlss_on_fixture(
             "intercept_mu": intercept,
             "weights_mu": dict(zip(feature_names, weights, strict=True)),
             "sigma": sigma,
+        },
+    }
+
+    _write_training_artifacts(config.output.directory, resolved, output)
+    return output
+
+
+def _train_distributional_gnn_baseline_on_fixture(
+    config: ExperimentConfig, fixture: Any, *, seed: int
+) -> dict[str, Any]:
+    splits = fixture.temporal_split_observations(
+        train=config.split.train,
+        validation=config.split.validation,
+        test=config.split.test,
+    )
+    scaling_policy = fit_traffic_scaling_policy(splits["train"])
+    scaled_splits = {
+        split_name: scaling_policy.transform_split(split)
+        for split_name, split in splits.items()
+    }
+    graph_state = _fit_distributional_gnn_state(
+        config,
+        scaled_splits["train"].observations,
+        fixture,
+    )
+    predictions = {
+        split_name: _distributional_gnn_prediction_for_split(
+            graph_state,
+            split.observations,
+        )
+        for split_name, split in scaled_splits.items()
+    }
+    metrics = {
+        split_name: _metrics_for_split(predictions[split_name], split.observations)
+        for split_name, split in scaled_splits.items()
+    }
+
+    resolved = config.to_resolved_dict()
+    resolved["train"] = True
+    resolved["training_seed"] = seed
+
+    loss = {split_name: report.nll for split_name, report in metrics.items()}
+    history = [
+        {
+            "epoch": epoch,
+            "loss": loss["train"],
+            "optimizer": config.optimizer.name,
+        }
+        for epoch in range(1, config.optimizer.max_epochs + 1)
+    ]
+    split_summary = {
+        split_name: _split_summary(split.observations)
+        for split_name, split in scaled_splits.items()
+    }
+    train_sigma = predictions["train"]["sigma"]
+
+    output = {
+        "run_name": config.output.run_name,
+        "model": {
+            "family": config.model.family,
+            "variant": config.model.variant,
+            "distribution": config.model.distribution,
+        },
+        "loss": loss,
+        "metrics": {
+            split_name: _metric_report_dict(report)
+            for split_name, report in metrics.items()
+        },
+        "resolved_config": resolved,
+        "scaling": _scaling_summary(config, scaling_policy),
+        "missingness": {
+            "target_policy": config.missingness.target,
+            "covariate_policy": config.missingness.covariates,
+            "fixture": fixture.missingness_report().__dict__,
+        },
+        "features": {
+            "local": list(config.features.local),
+            "neighbor": list(config.features.neighbor),
+            "local_metadata": [
+                feature.__dict__ for feature in fixture.local_feature_metadata
+            ],
+            "neighbor_metadata": [
+                feature.__dict__ for feature in fixture.neighbor_feature_metadata
+            ],
+        },
+        "graph": {
+            "representation": config.model.graph_representation,
+            "encoder": config.model.graph_encoder,
+            "injection": config.model.graph_injection,
+            "self_feature_access": config.model.graph_stream_self_feature_access,
+            "node_count": len(fixture.sensors),
+            "edge_count": len(fixture.adjacency),
+            "feature_names": list(graph_state["feature_names"]),
+            "embedding_dim": graph_state["embedding_dim"],
+        },
+        "splits": split_summary,
+        "training_history": history,
+        "parameters": {
+            "intercept_mu": graph_state["intercept_mu"],
+            "graph_weights_mu": dict(
+                zip(
+                    graph_state["embedding_names"],
+                    graph_state["graph_weights_mu"],
+                    strict=True,
+                )
+            ),
+            "intercept_sigma": graph_state["intercept_sigma"],
+            "graph_weights_sigma": dict(
+                zip(
+                    graph_state["embedding_names"],
+                    graph_state["graph_weights_sigma"],
+                    strict=True,
+                )
+            ),
+            "sigma": sum(train_sigma) / len(train_sigma),
         },
     }
 
@@ -367,6 +493,33 @@ def _validate_tracer_bullet_graph_training_config(config: ExperimentConfig) -> N
     _validate_traffic_policy_config(config)
 
 
+def _validate_distributional_gnn_training_config(config: ExperimentConfig) -> None:
+    if not _is_synthetic_config(config) and config.dataset.name != "METR-LA":
+        raise ConfigError(
+            "Distributional GNN baseline training supports synthetic traffic and METR-LA."
+        )
+    if config.model.distribution != "gaussian_location_scale":
+        raise ConfigError(
+            "Distributional GNN baseline training requires gaussian_location_scale."
+        )
+    if not _is_distributional_gnn_baseline_config(config):
+        raise ConfigError(
+            "Distributional GNN baseline training requires "
+            "model.family=DistributionalGNN, model.variant=baseline, "
+            "graph_representation=shared, "
+            "graph_injection=direct_distributional_parameters, "
+            "graph_stream_self_feature_access=neighbor_focused, and "
+            "graph_encoder=graphsage."
+        )
+    if config.graph is None:
+        raise ConfigError("Distributional GNN baseline training requires graph metadata.")
+    if not config.features.neighbor:
+        raise ConfigError(
+            "Distributional GNN baseline training requires neighbor graph features."
+        )
+    _validate_traffic_policy_config(config)
+
+
 def _validate_deterministic_model_config(config: ExperimentConfig) -> None:
     if config.model.family != "NAMLSS" or config.model.variant != "deterministic_local":
         raise ConfigError(
@@ -397,6 +550,17 @@ def _is_tracer_bullet_graph_config(config: ExperimentConfig) -> bool:
         and config.model.variant == "tracer_bullet"
         and config.model.graph_representation == "shared"
         and config.model.graph_injection == "additive_graph_contribution"
+        and config.model.graph_stream_self_feature_access == "neighbor_focused"
+        and config.model.graph_encoder == "graphsage"
+    )
+
+
+def _is_distributional_gnn_baseline_config(config: ExperimentConfig) -> bool:
+    return (
+        config.model.family == "DistributionalGNN"
+        and config.model.variant == "baseline"
+        and config.model.graph_representation == "shared"
+        and config.model.graph_injection == "direct_distributional_parameters"
         and config.model.graph_stream_self_feature_access == "neighbor_focused"
         and config.model.graph_encoder == "graphsage"
     )
@@ -627,6 +791,110 @@ def _fit_tracer_bullet_graph_state(
     }
 
 
+def _fit_distributional_gnn_state(
+    config: ExperimentConfig,
+    train_observations: Sequence[Any],
+    fixture: Any,
+) -> dict[str, Any]:
+    feature_names = tuple(config.features.neighbor)
+    metadata = GraphMetadata.from_edges(
+        node_ids=fixture.sensors,
+        edges=fixture.adjacency,
+        use_edge_weights=True,
+    )
+    train_embeddings = _graph_embeddings_by_observation(
+        train_observations,
+        feature_names=feature_names,
+        metadata=metadata,
+    )
+    embedding_centers = _embedding_centers(train_embeddings.values(), feature_names)
+    examples = tuple(
+        (
+            _center_embedding(
+                train_embeddings[(observation.sensor_id, observation.time_index)],
+                embedding_centers,
+            ),
+            float(observation.target_speed),
+        )
+        for observation in train_observations
+        if not observation.target_missing and observation.target_speed is not None
+    )
+    if not examples:
+        raise ConfigError(
+            "Distributional GNN baseline training requires observed training targets."
+        )
+
+    intercept_mu, graph_weights_mu = _fit_graph_parameter(examples, feature_names)
+    scale_examples = tuple(
+        (
+            embedding,
+            _inverse_softplus(
+                max(
+                    abs(
+                        target
+                        - _linear_predict(
+                            intercept_mu,
+                            graph_weights_mu,
+                            embedding,
+                        )
+                    ),
+                    1e-6,
+                )
+            ),
+        )
+        for embedding, target in examples
+    )
+    intercept_sigma, graph_weights_sigma = _fit_graph_parameter(
+        scale_examples,
+        feature_names,
+    )
+    return {
+        "metadata": metadata,
+        "feature_names": feature_names,
+        "embedding_names": feature_names,
+        "embedding_dim": len(feature_names),
+        "embedding_centers": embedding_centers,
+        "intercept_mu": intercept_mu,
+        "graph_weights_mu": graph_weights_mu,
+        "intercept_sigma": intercept_sigma,
+        "graph_weights_sigma": graph_weights_sigma,
+        "parameter_names": ("mu", "sigma"),
+    }
+
+
+def _distributional_gnn_prediction_for_split(
+    graph_state: Mapping[str, Any],
+    observations: Sequence[Any],
+) -> dict[str, tuple[float, ...]]:
+    embeddings = _graph_embeddings_by_observation(
+        observations,
+        feature_names=graph_state["feature_names"],
+        metadata=graph_state["metadata"],
+    )
+    eta = tuple(
+        (
+            _linear_predict(
+                graph_state["intercept_mu"],
+                graph_state["graph_weights_mu"],
+                _center_embedding(
+                    embeddings[(observation.sensor_id, observation.time_index)],
+                    graph_state["embedding_centers"],
+                ),
+            ),
+            _linear_predict(
+                graph_state["intercept_sigma"],
+                graph_state["graph_weights_sigma"],
+                _center_embedding(
+                    embeddings[(observation.sensor_id, observation.time_index)],
+                    graph_state["embedding_centers"],
+                ),
+            ),
+        )
+        for observation in observations
+    )
+    return _prediction_from_eta(eta)
+
+
 def _graph_contribution_for_split(
     graph_state: Mapping[str, Any],
     *,
@@ -779,6 +1047,21 @@ def _fit_graph_residual_weights(
         matrix[index][index] += 1e-6
 
     return _solve_linear_system(matrix, rhs)
+
+
+def _fit_graph_parameter(
+    examples: Sequence[tuple[Sequence[float], float]], feature_names: Sequence[str]
+) -> tuple[float, tuple[float, ...]]:
+    x_rows = [(1.0, *row) for row, _target in examples]
+    targets = [target for _row, target in examples]
+    coefficients = _solve_ridge_normal_equations(x_rows, targets)
+    return coefficients[0], tuple(coefficients[1:])
+
+
+def _linear_predict(
+    intercept: float, weights: Sequence[float], values: Sequence[float]
+) -> float:
+    return intercept + _dot(weights, values)
 
 
 def _dot(weights: Sequence[float], values: Sequence[float]) -> float:

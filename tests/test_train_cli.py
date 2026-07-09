@@ -252,6 +252,135 @@ output:
             assert math.isfinite(split_metrics[field])
 
 
+def test_train_command_runs_distributional_gnn_baseline_on_synthetic_traffic(tmp_path):
+    output_dir = tmp_path / "runs"
+    config_path = tmp_path / "synthetic_distributional_gnn_train.yaml"
+    config_path.write_text(
+        f"""
+dataset:
+  name: synthetic-METR-LA-smoke
+  task: fifteen_minute_ahead_speed
+  adjacency: synthetic_physical
+split:
+  strategy: temporal
+  train: 0.5
+  validation: 0.25
+  test: 0.25
+temporal:
+  frequency_minutes: 5
+  horizon_minutes: 15
+  horizon_steps: 3
+  lag_minutes:
+    - 0
+    - 5
+    - 10
+    - 15
+    - 30
+    - 60
+features:
+  local:
+    - current_speed
+    - current_speed_missing
+    - lag_5m
+    - lag_10m
+    - lag_15m
+    - lag_30m
+    - lag_60m
+    - time_of_day
+    - day_of_week
+    - weekend
+  neighbor:
+    - neighbor_current_speed
+    - neighbor_lag_5m
+    - neighbor_lag_10m
+    - neighbor_lag_15m
+    - neighbor_lag_30m
+    - neighbor_lag_60m
+missingness:
+  target: mask_missing_targets
+  covariates: past_observed_lag_imputation
+  future_looking_imputation: false
+scaling:
+  mode: train_period_standardization
+  fit_on: train
+  target: standardize
+  features: standardize_continuous
+graph:
+  source: synthetic_physical
+  format: fixture_edges
+  edge_weight: fixture_weight
+  directed: true
+model:
+  family: DistributionalGNN
+  variant: baseline
+  distribution: gaussian_location_scale
+  graph_representation: shared
+  graph_injection: direct_distributional_parameters
+  graph_stream_self_feature_access: neighbor_focused
+  graph_encoder: graphsage
+optimizer:
+  name: adam
+  learning_rate: 0.001
+  max_epochs: 1
+output:
+  directory: {output_dir}
+  run_name: distributional-gnn-synthetic
+""".strip()
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphnamlss",
+            "train",
+            "--config",
+            str(config_path),
+            "--seed",
+            "7",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    emitted = json.loads(result.stdout)
+    assert emitted["run_name"] == "distributional-gnn-synthetic"
+    assert emitted["model"] == {
+        "family": "DistributionalGNN",
+        "variant": "baseline",
+        "distribution": "gaussian_location_scale",
+    }
+    assert math.isfinite(emitted["loss"]["train"])
+
+    summary = json.loads((output_dir / "train_summary.json").read_text())
+    metrics = json.loads((output_dir / "metrics.json").read_text())
+
+    assert summary["graph"]["injection"] == "direct_distributional_parameters"
+    assert summary["graph"]["feature_names"] == [
+        "neighbor_current_speed",
+        "neighbor_lag_5m",
+        "neighbor_lag_10m",
+        "neighbor_lag_15m",
+        "neighbor_lag_30m",
+        "neighbor_lag_60m",
+    ]
+    assert summary["parameters"]["sigma"] > 0.0
+
+    metric_fields = set(metrics["train"])
+    for split_name in ("train", "validation", "test"):
+        split_metrics = metrics[split_name]
+        assert set(split_metrics) == metric_fields
+        assert split_metrics["unit"] == "standardized_traffic"
+        assert (
+            split_metrics["observed_count"]
+            == summary["splits"][split_name]["observed_target_count"]
+        )
+        for field in ("nll", "crps", "mae", "rmse"):
+            assert math.isfinite(split_metrics[field])
+
+
 def test_train_command_reports_missing_metr_la_artifacts_before_training():
     result = subprocess.run(
         [
@@ -582,6 +711,146 @@ output:
         assert split_metrics["unit"] == "standardized_traffic"
         assert split_metrics["observed_count"] == summary["splits"][split_name]["observed_target_count"]
         assert len(graph_contributions["splits"][split_name]) == summary["splits"][split_name]["prediction_count"]
+        for field in ("nll", "crps", "mae", "rmse"):
+            assert math.isfinite(split_metrics[field])
+
+
+def test_train_command_runs_distributional_gnn_baseline_on_metr_la_artifacts(tmp_path):
+    readings_path = tmp_path / "metr_la_readings.csv"
+    adjacency_path = tmp_path / "adjacency.csv"
+    output_dir = tmp_path / "runs"
+    config_path = tmp_path / "metr_la_distributional_gnn_train.yaml"
+    _write_wide_metr_la_readings(readings_path)
+    adjacency_path.write_text(
+        "source,target,weight\n"
+        "sensor_b,sensor_a,0.25\n"
+        "sensor_c,sensor_a,0.75\n"
+        "sensor_a,sensor_b,0.50\n"
+        "sensor_b,sensor_c,1.00\n"
+    )
+    config_path.write_text(
+        f"""
+dataset:
+  name: METR-LA
+  task: fifteen_minute_ahead_speed
+  adjacency: dataset_provided
+  artifacts:
+    readings: {readings_path}
+    adjacency: {adjacency_path}
+split:
+  strategy: temporal
+  train: 0.6
+  validation: 0.2
+  test: 0.2
+temporal:
+  frequency_minutes: 5
+  horizon_minutes: 15
+  horizon_steps: 3
+  lag_minutes:
+    - 0
+    - 5
+    - 10
+    - 15
+    - 30
+    - 60
+features:
+  local:
+    - current_speed
+    - current_speed_missing
+    - lag_5m
+    - lag_10m
+    - lag_15m
+    - lag_30m
+    - lag_60m
+    - time_of_day
+    - day_of_week
+    - weekend
+  neighbor:
+    - neighbor_current_speed
+    - neighbor_lag_5m
+    - neighbor_lag_10m
+    - neighbor_lag_15m
+    - neighbor_lag_30m
+    - neighbor_lag_60m
+missingness:
+  target: mask_missing_targets
+  covariates: past_observed_lag_imputation
+  future_looking_imputation: false
+scaling:
+  mode: train_period_standardization
+  fit_on: train
+  target: standardize
+  features: standardize_continuous
+graph:
+  source: dataset_provided
+  format: edge_list_csv
+  edge_weight: dataset_provided_weight
+  directed: true
+model:
+  family: DistributionalGNN
+  variant: baseline
+  distribution: gaussian_location_scale
+  graph_representation: shared
+  graph_injection: direct_distributional_parameters
+  graph_stream_self_feature_access: neighbor_focused
+  graph_encoder: graphsage
+optimizer:
+  name: adam
+  learning_rate: 0.001
+  max_epochs: 1
+output:
+  directory: {output_dir}
+  run_name: distributional-gnn-metr-la
+""".strip()
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphnamlss",
+            "train",
+            "--config",
+            str(config_path),
+            "--seed",
+            "7",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    emitted = json.loads(result.stdout)
+    assert emitted["run_name"] == "distributional-gnn-metr-la"
+    assert emitted["model"] == {
+        "family": "DistributionalGNN",
+        "variant": "baseline",
+        "distribution": "gaussian_location_scale",
+    }
+
+    resolved = json.loads((output_dir / "resolved_config.json").read_text())
+    summary = json.loads((output_dir / "train_summary.json").read_text())
+    metrics = json.loads((output_dir / "metrics.json").read_text())
+
+    assert resolved["dataset"]["name"] == "METR-LA"
+    assert summary["graph"]["representation"] == "shared"
+    assert summary["graph"]["encoder"] == "graphsage"
+    assert summary["graph"]["injection"] == "direct_distributional_parameters"
+    assert summary["graph"]["self_feature_access"] == "neighbor_focused"
+    assert summary["graph"]["node_count"] == 3
+    assert summary["graph"]["edge_count"] == 4
+    assert summary["parameters"]["sigma"] > 0.0
+
+    metric_fields = set(metrics["train"])
+    for split_name in ("train", "validation", "test"):
+        split_metrics = metrics[split_name]
+        assert set(split_metrics) == metric_fields
+        assert split_metrics["unit"] == "standardized_traffic"
+        assert (
+            split_metrics["observed_count"]
+            == summary["splits"][split_name]["observed_target_count"]
+        )
         for field in ("nll", "crps", "mae", "rmse"):
             assert math.isfinite(split_metrics[field])
 
