@@ -32,6 +32,10 @@ _Avoid_: graph residual unless residualization is explicitly enforced
 A learned per-parameter scalar that controls how strongly an additive graph contribution enters a distributional predictor.
 _Avoid_: graph weight when referring to the scalar gate rather than graph edge weights
 
+**Graph Gate Diagnostic**:
+The interpretation of Graph Contribution Gate values as visible diagnostics of parameter-specific graph reliance in a fitted model or demo, not as causal attributions or standalone proof of empirical merit.
+_Avoid_: treating gate magnitude alone as evidence that graph information improves a distributional parameter
+
 **Centered Graph Contribution**:
 An additive graph contribution centered per distributional parameter so it does not absorb the predictor intercept.
 _Avoid_: raw graph contribution
@@ -115,6 +119,94 @@ _Avoid_: distributional baseline
 **Tracer-Bullet Slice**:
 The first end-to-end implementation milestone that validates the data pipeline, likelihood, metrics, and plots with a minimal set of models before expanding to the full primary matrix.
 _Avoid_: prototype when the end-to-end experiment contract is the important point
+
+**Tracer-Bullet Fit**:
+A lightweight deterministic fitting path used to make the Concept Demonstrator runnable and inspectable before the full research-grade optimizer-trained GraphNAMLSS path is required.
+_Avoid_: presenting the Tracer-Bullet Fit as equivalent to a full PyTorch/PyG trained GraphNAMLSS when discussing empirical merit
+
+**Tracer-Bullet Fit Disclosure**:
+The Concept Demo Bundle report note that the demo uses a lightweight deterministic tracer-bullet fit to make the model decomposition and artifacts inspectable, while empirical claims require the Merit Probe Training Standard.
+_Avoid_: letting colleagues infer that the Concept Demonstrator already uses the final research-grade training path
+
+**Concept Demonstrator**:
+A project phase where the repo is expected to make the GraphNAMLSS idea understandable and runnable for colleagues, including the local additive predictor, graph contribution, parameter-specific gates, distributional metrics, and report artifacts.
+_Avoid_: treating the Concept Demonstrator as empirical proof that the approach outperforms baselines
+
+**Methodologically Sympathetic Colleague**:
+The first audience for the Concept Demonstrator: a colleague who understands enough statistics or machine learning to judge whether the modeling idea is coherent, but who does not yet require publication-grade benchmark evidence.
+_Avoid_: optimizing the Concept Demonstrator for skeptical reviewer standards before the idea is clearly communicable
+
+**Concept Demonstrator Takeaway**:
+The intended conclusion for a Methodologically Sympathetic Colleague: GraphNAMLSS is a coherent modeling idea that preserves local additive distributional interpretability while adding graph-derived, parameter-specific contributions, and the repo demonstrates the decomposition and experiment contract before claiming empirical merit.
+_Avoid_: presenting the Concept Demonstrator as proof that GraphNAMLSS outperforms baselines
+
+**Concept Demo Bundle**:
+A single-command demonstration run that produces the core Concept Demonstrator artifacts from synthetic traffic data by default: deterministic NAMLSS, Tracer-Bullet GraphNAMLSS, Distributional GNN Baseline, Point GNN Reference, report markdown, local shape plots, graph contribution maps, graph gates, resolved configs, and metrics.
+_Avoid_: asking first-time colleagues to manually orchestrate separate model runs before they can inspect the idea
+
+**Guided Demo Path**:
+The colleague-facing path through the Concept Demonstrator: one command, one generated report, and a short reading order that explains the local additive predictor, graph contribution, parameter-specific gates, metrics, and evidence boundary.
+_Avoid_: adding more model breadth before first-time readers can follow the existing tracer-bullet idea end to end
+
+**Concept Demo Report Order**:
+The reading order for the Concept Demo Bundle report: model decomposition first, then local shape contributions, graph contributions, graph gates, metrics, and finally the evidence boundary.
+_Avoid_: leading the Concept Demonstrator with benchmark tables before readers understand the modeling idea
+
+**Localized Congestion Spillover Demo Scenario**:
+The synthetic Concept Demo Bundle scenario where ordinary traffic behavior is mostly explained by local lags, while graph-neighbor congestion adds an interpretable distributional effect: expected slowdown through the location parameter and increased uncertainty through the scale parameter.
+_Avoid_: using a generic synthetic fixture that runs the pipeline but does not make the parameter-specific graph contribution understandable
+
+**Heteroskedastic Spillover Uncertainty**:
+The Demo Fixture behavior where downstream target variability increases during graph-neighbor congestion spillover windows, giving the scale parameter a synthetic signal that is distinct from the location slowdown.
+_Avoid_: demonstrating the scale head only as a mechanically positive parameter without a scenario-level uncertainty signal
+
+**Demo Fixture**:
+A synthetic traffic fixture built for the Concept Demo Bundle narrative rather than for broad contract testing, with a clear Localized Congestion Spillover Demo Scenario.
+_Avoid_: mutating the general synthetic traffic fixture until contract tests become dependent on the demo story
+
+**Demo Data-Generating Story**:
+The explicit synthetic scenario description included in the Concept Demo Bundle report, explaining that upstream congestion propagates through the graph, local lags explain routine behavior, and neighbor lag features expose spillover for distributional inspection.
+_Avoid_: making colleagues infer the synthetic scenario only from plotted artifacts
+
+**Contract Fixture**:
+A small synthetic traffic fixture used to test data, split, lag, missingness, scaling, model, and report contracts without needing a colleague-facing scenario.
+_Avoid_: judging concept clarity from a fixture whose purpose is only pipeline coverage
+
+**Concept Demo Evidence Boundary**:
+The rule that Concept Demo Bundle metrics are sanity checks for a runnable and inspectable experiment contract, not evidence that GraphNAMLSS outperforms baselines or improves calibration.
+_Avoid_: interpreting synthetic demo metrics as support for the Distributional Calibration Claim or Parameter-Specific Graph Effect
+
+**Merit Probe**:
+A project phase where real benchmark evidence is strong enough to decide whether GraphNAMLSS deserves further research investment.
+_Avoid_: using synthetic fixture results or runnable scaffolding as the Merit Probe
+
+**METR-LA Merit Probe**:
+The first real-data Merit Probe for GraphNAMLSS, using the METR-LA Traffic Network Benchmark to decide whether the approach shows enough signal to justify deeper research investment.
+_Avoid_: requiring PEMS-BAY replication before deciding whether the first real benchmark is promising
+
+**Merit Probe Training Standard**:
+The training standard for real benchmark evidence: the METR-LA Merit Probe should use an optimizer-trained GraphNAMLSS path that matches the conceptual architecture, or explicitly justify why a deterministic fitting path is the intended model rather than only a demo simplification.
+_Avoid_: basing the Further-Investment Gate on a simplified implementation whose relationship to the claimed model is unclear
+
+**METR-LA Merit Probe Primary Comparison**:
+The first real-data comparison that matters for the research investment decision: deterministic NAMLSS versus Tracer-Bullet GraphNAMLSS on METR-LA.
+_Avoid_: making the first go/no-go decision depend on the full baseline suite
+
+**METR-LA Merit Probe Secondary Context**:
+The supporting baseline context for the first real-data Merit Probe: Distributional GNN Baseline as a less interpretable graph distributional model, and Point GNN Reference as a point-accuracy guardrail.
+_Avoid_: treating the Point GNN Reference as a distributional peer
+
+**Further-Investment Gate**:
+The first go/no-go standard for spending more research time on GraphNAMLSS: on the METR-LA Merit Probe, Tracer-Bullet GraphNAMLSS should show at least one clear distributional signal versus deterministic NAMLSS, preferably improved NLL or CRPS, without serious degradation in coverage, PIT, MAE, or RMSE, while preserving interpretable local shape and graph contribution artifacts.
+_Avoid_: requiring publication-grade dominance across every metric before deciding whether the idea deserves more work
+
+**Merit Probe Failure Rule**:
+If the METR-LA Merit Probe does not pass the Further-Investment Gate, the project should pause architecture expansion and diagnose the data, baseline, fitting method, graph stream, scale predictor, and horizon choice before adding PEMS-BAY replication, the full Primary Experiment Matrix, Bayesian graph streams, or medical applications.
+_Avoid_: responding to an unclear first signal by adding more model variants
+
+**PEMS-BAY Replication Gate**:
+The follow-up replication check after the METR-LA Merit Probe, used to test whether promising results on METR-LA generalize to another public traffic network.
+_Avoid_: treating PEMS-BAY portability work as the first evidence gate
 
 **Tracer-Bullet GraphNAMLSS**:
 The first GraphNAMLSS implementation cell: shared graph representation, additive graph contribution, neighbor-focused graph stream, and deterministic graph weights before adding Bayesian graph weights.

@@ -1,0 +1,3 @@
+# Prioritize the concept demonstrator before the merit probe
+
+The next phase will prioritize a colleague-facing Concept Demonstrator and Guided Demo Path before treating the repo as empirical evidence for GraphNAMLSS. This means building a single-command synthetic Concept Demo Bundle, a report that leads with the model decomposition, and explicit evidence boundaries before expanding the full architecture matrix, Bayesian graph stream, medical application track, or PEMS-BAY replication. The METR-LA Merit Probe remains the first real-data go/no-go gate, but synthetic demo metrics are only sanity checks for a runnable and inspectable experiment contract.
