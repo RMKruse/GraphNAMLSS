@@ -1,0 +1,86 @@
+name: primary_experiment_matrix
+canonical_base_config: configs/metr_la_graph_tracer_bullet.yaml
+factor_levels:
+  graph_representation:
+    - shared
+    - per_parameter
+  graph_injection:
+    - additive_graph_contribution
+    - graph_aware_shape_functions
+  graph_stream_self_feature_access:
+    - neighbor_focused
+    - self_inclusive
+runs:
+  - run_id: shared-additive-neighbor-focused
+    factors:
+      graph_representation: shared
+      graph_injection: additive_graph_contribution
+      graph_stream_self_feature_access: neighbor_focused
+    status: completed
+    config_path: configs/metr_la_graph_tracer_bullet.yaml
+    issue: 20
+  - run_id: shared-additive-self-inclusive
+    factors:
+      graph_representation: shared
+      graph_injection: additive_graph_contribution
+      graph_stream_self_feature_access: self_inclusive
+    status: planned
+  - run_id: shared-shape-functions-neighbor-focused
+    factors:
+      graph_representation: shared
+      graph_injection: graph_aware_shape_functions
+      graph_stream_self_feature_access: neighbor_focused
+    status: planned
+  - run_id: shared-shape-functions-self-inclusive
+    factors:
+      graph_representation: shared
+      graph_injection: graph_aware_shape_functions
+      graph_stream_self_feature_access: self_inclusive
+    status: planned
+  - run_id: per-parameter-additive-neighbor-focused
+    factors:
+      graph_representation: per_parameter
+      graph_injection: additive_graph_contribution
+      graph_stream_self_feature_access: neighbor_focused
+    status: planned
+  - run_id: per-parameter-additive-self-inclusive
+    factors:
+      graph_representation: per_parameter
+      graph_injection: additive_graph_contribution
+      graph_stream_self_feature_access: self_inclusive
+    status: planned
+  - run_id: per-parameter-shape-functions-neighbor-focused
+    factors:
+      graph_representation: per_parameter
+      graph_injection: graph_aware_shape_functions
+      graph_stream_self_feature_access: neighbor_focused
+    status: planned
+  - run_id: per-parameter-shape-functions-self-inclusive
+    factors:
+      graph_representation: per_parameter
+      graph_injection: graph_aware_shape_functions
+      graph_stream_self_feature_access: self_inclusive
+    status: planned
+comparison_views:
+  - name: same_recipe
+    capacity_policy: same_hidden_dimensions
+    run_ids:
+      - shared-additive-neighbor-focused
+      - shared-additive-self-inclusive
+      - shared-shape-functions-neighbor-focused
+      - shared-shape-functions-self-inclusive
+      - per-parameter-additive-neighbor-focused
+      - per-parameter-additive-self-inclusive
+      - per-parameter-shape-functions-neighbor-focused
+      - per-parameter-shape-functions-self-inclusive
+  - name: parameter_matched_check
+    capacity_policy: rough_parameter_count_match
+    run_ids:
+      - shared-additive-neighbor-focused
+      - shared-additive-self-inclusive
+      - shared-shape-functions-neighbor-focused
+      - shared-shape-functions-self-inclusive
+      - per-parameter-additive-neighbor-focused
+      - per-parameter-additive-self-inclusive
+      - per-parameter-shape-functions-neighbor-focused
+      - per-parameter-shape-functions-self-inclusive

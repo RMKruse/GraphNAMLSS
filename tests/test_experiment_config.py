@@ -1,9 +1,11 @@
 from graphnamlss.config import (
     ConfigError,
     ExperimentConfig,
+    load_primary_experiment_matrix,
     load_experiment_config,
     validate_experiment_artifacts,
     validate_experiment_config,
+    validate_primary_experiment_matrix,
 )
 from graphnamlss.testing import load_synthetic_traffic_fixture_from_config
 from graphnamlss.traffic_scaling import fit_traffic_scaling_policy
@@ -21,6 +23,52 @@ def test_sample_tracer_bullet_config_loads_as_typed_experiment_config():
     assert config.model.variant == "tracer_bullet"
     assert config.optimizer.name == "adam"
     assert config.output.run_name == "tracer-bullet-dry-run"
+
+
+def test_primary_experiment_matrix_enumerates_completed_tracer_bullet_cell():
+    matrix = load_primary_experiment_matrix("configs/primary_experiment_matrix.yaml")
+
+    assert matrix.name == "primary_experiment_matrix"
+    assert matrix.canonical_base_config == "configs/metr_la_graph_tracer_bullet.yaml"
+    assert matrix.factor_levels == {
+        "graph_representation": ("shared", "per_parameter"),
+        "graph_injection": (
+            "additive_graph_contribution",
+            "graph_aware_shape_functions",
+        ),
+        "graph_stream_self_feature_access": (
+            "neighbor_focused",
+            "self_inclusive",
+        ),
+    }
+    assert len(matrix.runs) == 8
+
+    tracer_bullet = matrix.completed_runs[0]
+    assert tracer_bullet.run_id == "shared-additive-neighbor-focused"
+    assert tracer_bullet.config_path == "configs/metr_la_graph_tracer_bullet.yaml"
+    assert tracer_bullet.issue == 20
+
+
+def test_primary_experiment_matrix_represents_comparison_run_definitions():
+    matrix = load_primary_experiment_matrix("configs/primary_experiment_matrix.yaml")
+
+    comparison_views = {view.name: view for view in matrix.comparison_views}
+    matrix_run_ids = tuple(run.run_id for run in matrix.runs)
+
+    assert set(comparison_views) == {"same_recipe", "parameter_matched_check"}
+    assert comparison_views["same_recipe"].run_ids == matrix_run_ids
+    assert comparison_views["same_recipe"].capacity_policy == "same_hidden_dimensions"
+    assert comparison_views["parameter_matched_check"].run_ids == matrix_run_ids
+    assert (
+        comparison_views["parameter_matched_check"].capacity_policy
+        == "rough_parameter_count_match"
+    )
+
+
+def test_primary_experiment_matrix_validation_accepts_full_run_plan():
+    matrix = load_primary_experiment_matrix("configs/primary_experiment_matrix.yaml")
+
+    validate_primary_experiment_matrix(matrix)
 
 
 def test_metr_la_config_resolves_deterministic_baseline_contract():

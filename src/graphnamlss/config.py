@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,37 @@ class GraphConfig:
     format: str
     edge_weight: str
     directed: bool
+
+
+@dataclass(frozen=True)
+class MatrixRunDefinition:
+    run_id: str
+    graph_representation: str
+    graph_injection: str
+    graph_stream_self_feature_access: str
+    status: str
+    config_path: str | None = None
+    issue: int | None = None
+
+
+@dataclass(frozen=True)
+class MatrixComparisonView:
+    name: str
+    capacity_policy: str
+    run_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PrimaryExperimentMatrix:
+    name: str
+    canonical_base_config: str
+    factor_levels: dict[str, tuple[str, ...]]
+    runs: tuple[MatrixRunDefinition, ...]
+    comparison_views: tuple[MatrixComparisonView, ...]
+
+    @property
+    def completed_runs(self) -> tuple[MatrixRunDefinition, ...]:
+        return tuple(run for run in self.runs if run.status == "completed")
 
 
 @dataclass(frozen=True)
@@ -234,6 +266,86 @@ def load_experiment_config(path: str | Path) -> ExperimentConfig:
     )
 
 
+def load_primary_experiment_matrix(path: str | Path) -> PrimaryExperimentMatrix:
+    config_path = Path(path)
+    try:
+        raw = yaml.safe_load(config_path.read_text())
+    except OSError as exc:
+        raise ConfigError(f"Could not read matrix file {config_path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"Could not parse YAML matrix {config_path}: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise ConfigError("Primary experiment matrix must be a YAML mapping.")
+
+    return PrimaryExperimentMatrix(
+        name=_required_str(raw, "name"),
+        canonical_base_config=_required_str(raw, "canonical_base_config"),
+        factor_levels=_load_factor_levels(_required_mapping(raw, "factor_levels")),
+        runs=_load_matrix_runs(_required_sequence(raw, "runs")),
+        comparison_views=_load_comparison_views(
+            _required_sequence(raw, "comparison_views")
+        ),
+    )
+
+
+def _load_factor_levels(raw: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    return {
+        "graph_representation": _required_str_tuple(raw, "graph_representation"),
+        "graph_injection": _required_str_tuple(raw, "graph_injection"),
+        "graph_stream_self_feature_access": _required_str_tuple(
+            raw, "graph_stream_self_feature_access"
+        ),
+    }
+
+
+def _load_matrix_runs(raw: list[Any]) -> tuple[MatrixRunDefinition, ...]:
+    runs = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ConfigError(f"Expected mapping: runs[{index}].")
+        factors = _required_mapping(item, "factors")
+        issue = item.get("issue")
+        if issue is not None and (not isinstance(issue, int) or isinstance(issue, bool)):
+            raise ConfigError(f"Expected integer: runs[{index}].issue.")
+        config_path = item.get("config_path")
+        if config_path is not None and (
+            not isinstance(config_path, str) or not config_path.strip()
+        ):
+            raise ConfigError(f"Expected string: runs[{index}].config_path.")
+        runs.append(
+            MatrixRunDefinition(
+                run_id=_required_str(item, "run_id"),
+                graph_representation=_required_str(
+                    factors, "factors.graph_representation"
+                ),
+                graph_injection=_required_str(factors, "factors.graph_injection"),
+                graph_stream_self_feature_access=_required_str(
+                    factors, "factors.graph_stream_self_feature_access"
+                ),
+                status=_required_str(item, "status"),
+                config_path=config_path,
+                issue=issue,
+            )
+        )
+    return tuple(runs)
+
+
+def _load_comparison_views(raw: list[Any]) -> tuple[MatrixComparisonView, ...]:
+    views = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ConfigError(f"Expected mapping: comparison_views[{index}].")
+        views.append(
+            MatrixComparisonView(
+                name=_required_str(item, "name"),
+                capacity_policy=_required_str(item, "capacity_policy"),
+                run_ids=_required_str_tuple(item, "run_ids"),
+            )
+        )
+    return tuple(views)
+
+
 def _load_dataset_config(config_path: Path, raw: dict[str, Any]) -> DatasetConfig:
     return DatasetConfig(
         name=_required_str(raw, "dataset.name"),
@@ -353,6 +465,37 @@ def validate_experiment_config(config: ExperimentConfig) -> None:
             )
 
 
+def validate_primary_experiment_matrix(matrix: PrimaryExperimentMatrix) -> None:
+    expected_keys = (
+        "graph_representation",
+        "graph_injection",
+        "graph_stream_self_feature_access",
+    )
+    if set(matrix.factor_levels) != set(expected_keys):
+        raise ConfigError("Primary experiment matrix must define all three factors.")
+
+    expected_cells = set(product(*(matrix.factor_levels[key] for key in expected_keys)))
+    observed_cells = {
+        (
+            run.graph_representation,
+            run.graph_injection,
+            run.graph_stream_self_feature_access,
+        )
+        for run in matrix.runs
+    }
+    if observed_cells != expected_cells:
+        raise ConfigError("Primary experiment matrix must enumerate every factor cell.")
+
+    run_ids = {run.run_id for run in matrix.runs}
+    for view in matrix.comparison_views:
+        unknown_run_ids = set(view.run_ids) - run_ids
+        if unknown_run_ids:
+            unknown = ", ".join(sorted(unknown_run_ids))
+            raise ConfigError(
+                f"Comparison view {view.name} references unknown runs: {unknown}."
+            )
+
+
 def _required_mapping(raw: dict[str, Any], key: str) -> dict[str, Any]:
     value = raw.get(key)
     if not isinstance(value, dict):
@@ -406,6 +549,13 @@ def _required_str_tuple(raw: dict[str, Any], dotted_key: str) -> tuple[str, ...]
     ):
         raise ConfigError(f"Missing required non-empty string list: {dotted_key}.")
     return tuple(value)
+
+
+def _required_sequence(raw: dict[str, Any], dotted_key: str) -> list[Any]:
+    value = _lookup(raw, dotted_key)
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"Missing required non-empty list: {dotted_key}.")
+    return value
 
 
 def _required_int_tuple(raw: dict[str, Any], dotted_key: str) -> tuple[int, ...]:
