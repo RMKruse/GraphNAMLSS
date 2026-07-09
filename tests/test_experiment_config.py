@@ -63,6 +63,82 @@ def test_metr_la_config_resolves_deterministic_baseline_contract():
     }
 
 
+def test_pems_bay_config_resolves_replication_dataset_contract():
+    config = load_experiment_config("configs/pems_bay.yaml")
+    validate_experiment_config(config)
+
+    resolved = config.to_resolved_dict()
+
+    assert resolved["dataset"]["name"] == "PEMS-BAY"
+    assert resolved["dataset"]["artifacts"]["readings"].endswith(
+        "data/raw/pems-bay/pems-bay.h5"
+    )
+    assert resolved["dataset"]["artifacts"]["adjacency"].endswith(
+        "data/raw/pems-bay/adj_mx_bay.pkl"
+    )
+    assert resolved["split"]["boundaries"] == {
+        "train": [0.0, 0.7],
+        "validation": [0.7, 0.8],
+        "test": [0.8, 1.0],
+    }
+    assert resolved["features"] == {
+        "local": [
+            "current_speed",
+            "current_speed_missing",
+            "lag_5m",
+            "lag_10m",
+            "lag_15m",
+            "lag_30m",
+            "lag_60m",
+            "time_of_day",
+            "day_of_week",
+            "weekend",
+        ],
+        "neighbor": [
+            "neighbor_current_speed",
+            "neighbor_current_speed_missing",
+            "neighbor_lag_5m",
+            "neighbor_lag_5m_missing",
+            "neighbor_lag_10m",
+            "neighbor_lag_10m_missing",
+            "neighbor_lag_15m",
+            "neighbor_lag_15m_missing",
+            "neighbor_lag_30m",
+            "neighbor_lag_30m_missing",
+            "neighbor_lag_60m",
+            "neighbor_lag_60m_missing",
+        ],
+    }
+    assert resolved["temporal"]["horizon_minutes"] == 15
+    assert resolved["temporal"]["lag_minutes"] == [0, 5, 10, 15, 30, 60]
+    assert resolved["scaling"]["mode"] == "train_period_standardization"
+    assert resolved["missingness"]["target"] == "mask_missing_targets"
+    assert resolved["missingness"]["covariates"] == "past_observed_lag_imputation"
+    assert resolved["graph"] == {
+        "source": "dataset_provided",
+        "format": "dcrnn_adjacency_pickle",
+        "edge_weight": "dataset_provided_distance_kernel",
+        "directed": True,
+    }
+
+
+def test_pems_bay_config_reports_missing_required_artifacts():
+    config = load_experiment_config("configs/pems_bay.yaml")
+
+    try:
+        validate_experiment_artifacts(config)
+    except ConfigError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Expected absent PEMS-BAY artifacts to fail validation.")
+
+    assert "Missing required dataset artifacts for PEMS-BAY" in message
+    assert "readings:" in message
+    assert "adjacency:" in message
+    assert "data/raw/pems-bay/pems-bay.h5" in message
+    assert "data/raw/pems-bay/adj_mx_bay.pkl" in message
+
+
 def test_metr_la_distributional_gnn_config_resolves_baseline_contract():
     config = load_experiment_config("configs/metr_la_distributional_gnn.yaml")
     validate_experiment_config(config)

@@ -3,6 +3,9 @@ import math
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
+
+import yaml
 
 
 def test_train_command_runs_deterministic_namlss_on_synthetic_traffic(tmp_path):
@@ -677,6 +680,63 @@ output:
         assert split_metrics["observed_count"] == summary["splits"][split_name]["observed_target_count"]
         for field in ("nll", "crps", "mae", "rmse"):
             assert math.isfinite(split_metrics[field])
+
+
+def test_train_command_runs_deterministic_namlss_on_pems_bay_artifacts(tmp_path):
+    readings_path = tmp_path / "pems_bay_readings.csv"
+    adjacency_path = tmp_path / "adjacency.csv"
+    output_dir = tmp_path / "runs"
+    config_path = tmp_path / "pems_bay_train.yaml"
+    _write_wide_metr_la_readings(readings_path)
+    adjacency_path.write_text(
+        "source,target,weight\n"
+        "sensor_b,sensor_a,0.25\n"
+        "sensor_c,sensor_a,0.75\n"
+        "sensor_a,sensor_b,0.50\n"
+        "sensor_b,sensor_c,1.00\n"
+    )
+
+    raw_config = yaml.safe_load(Path("configs/pems_bay.yaml").read_text())
+    raw_config["dataset"]["artifacts"] = {
+        "readings": str(readings_path),
+        "adjacency": str(adjacency_path),
+    }
+    raw_config["graph"]["format"] = "edge_list_csv"
+    raw_config["graph"]["edge_weight"] = "dataset_provided_weight"
+    raw_config["output"]["directory"] = str(output_dir)
+    config_path.write_text(yaml.safe_dump(raw_config, sort_keys=False))
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphnamlss",
+            "train",
+            "--config",
+            str(config_path),
+            "--seed",
+            "7",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    emitted = json.loads(result.stdout)
+    assert emitted["run_name"] == "deterministic-pems-bay"
+    assert math.isfinite(emitted["loss"]["train"])
+
+    resolved = json.loads((output_dir / "resolved_config.json").read_text())
+    summary = json.loads((output_dir / "train_summary.json").read_text())
+    metrics = json.loads((output_dir / "metrics.json").read_text())
+
+    assert resolved["dataset"]["name"] == "PEMS-BAY"
+    assert summary["features"]["local"] == resolved["features"]["local"]
+    assert summary["missingness"]["target_policy"] == "mask_missing_targets"
+    assert summary["missingness"]["covariate_policy"] == "past_observed_lag_imputation"
+    assert summary["splits"]["train"]["observed_target_count"] > 0
+    assert set(metrics) == {"train", "validation", "test"}
 
 
 def test_train_command_runs_tracer_bullet_graph_namlss_on_metr_la_artifacts(tmp_path):

@@ -127,6 +127,18 @@ sigma = softplus(eta_sigma) + epsilon
 
 The traffic benchmark starts with METR-LA and then replicates on PEMS-BAY.
 
+### PEMS-BAY Replication Dataset
+
+The PEMS-BAY replication config lives at `configs/pems_bay.yaml` and uses the
+same experiment schema, temporal split, covariate set, scaling policy,
+missingness policy, and dataset-provided graph contract as the METR-LA tracer
+config.
+
+Required local artifacts:
+
+- `data/raw/pems-bay/pems-bay.h5` for wide sensor readings.
+- `data/raw/pems-bay/adj_mx_bay.pkl` for the dataset-provided DCRNN adjacency.
+
 The local covariate set contains:
 
 - current speed or flow

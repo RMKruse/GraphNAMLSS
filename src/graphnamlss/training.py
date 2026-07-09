@@ -574,13 +574,17 @@ def _prepare_deterministic_local_training(
     }
 
 
+SUPPORTED_REAL_TRAFFIC_DATASETS = frozenset({"METR-LA", "PEMS-BAY"})
+
+
 def _validate_deterministic_traffic_training_config(config: ExperimentConfig) -> None:
     if _is_synthetic_config(config):
         _validate_synthetic_training_config(config)
         return
-    if config.dataset.name != "METR-LA":
+    if not _is_supported_real_traffic_config(config):
         raise ConfigError(
-            "Deterministic NAMLSS training supports synthetic traffic and METR-LA."
+            "Deterministic NAMLSS training supports synthetic traffic, "
+            "METR-LA, and PEMS-BAY."
         )
     _validate_shared_training_config(config)
 
@@ -601,9 +605,10 @@ def _validate_shared_training_config(config: ExperimentConfig) -> None:
 
 
 def _validate_tracer_bullet_graph_training_config(config: ExperimentConfig) -> None:
-    if not _is_synthetic_config(config) and config.dataset.name != "METR-LA":
+    if not _is_synthetic_config(config) and not _is_supported_real_traffic_config(config):
         raise ConfigError(
-            "Tracer-bullet GraphNAMLSS training supports synthetic traffic and METR-LA."
+            "Tracer-bullet GraphNAMLSS training supports synthetic traffic, "
+            "METR-LA, and PEMS-BAY."
         )
     if config.model.distribution != "gaussian_location_scale":
         raise ConfigError("Tracer-bullet GraphNAMLSS training requires gaussian_location_scale.")
@@ -625,9 +630,10 @@ def _validate_tracer_bullet_graph_training_config(config: ExperimentConfig) -> N
 
 
 def _validate_distributional_gnn_training_config(config: ExperimentConfig) -> None:
-    if not _is_synthetic_config(config) and config.dataset.name != "METR-LA":
+    if not _is_synthetic_config(config) and not _is_supported_real_traffic_config(config):
         raise ConfigError(
-            "Distributional GNN baseline training supports synthetic traffic and METR-LA."
+            "Distributional GNN baseline training supports synthetic traffic, "
+            "METR-LA, and PEMS-BAY."
         )
     if config.model.distribution != "gaussian_location_scale":
         raise ConfigError(
@@ -652,9 +658,10 @@ def _validate_distributional_gnn_training_config(config: ExperimentConfig) -> No
 
 
 def _validate_point_gnn_reference_training_config(config: ExperimentConfig) -> None:
-    if not _is_synthetic_config(config) and config.dataset.name != "METR-LA":
+    if not _is_synthetic_config(config) and not _is_supported_real_traffic_config(config):
         raise ConfigError(
-            "Point GNN reference training supports synthetic traffic and METR-LA."
+            "Point GNN reference training supports synthetic traffic, "
+            "METR-LA, and PEMS-BAY."
         )
     if config.model.distribution != "conditional_mean":
         raise ConfigError("Point GNN reference training requires conditional_mean.")
@@ -740,6 +747,10 @@ def _load_traffic_fixture(config: ExperimentConfig, *, seed: int) -> Any:
 
 def _is_synthetic_config(config: ExperimentConfig) -> bool:
     return "synthetic" in config.dataset.name.lower()
+
+
+def _is_supported_real_traffic_config(config: ExperimentConfig) -> bool:
+    return config.dataset.name in SUPPORTED_REAL_TRAFFIC_DATASETS
 
 
 def _feature_rows(

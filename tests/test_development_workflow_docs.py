@@ -17,3 +17,12 @@ def test_readme_documents_synthetic_traffic_fixture_as_test_data():
     assert "Synthetic Traffic Fixture" in readme
     assert "test data" in readme
     assert "not a scientific benchmark" in readme
+
+
+def test_readme_documents_pems_bay_replication_artifacts():
+    readme = Path("README.md").read_text()
+
+    assert "PEMS-BAY Replication Dataset" in readme
+    assert "configs/pems_bay.yaml" in readme
+    assert "data/raw/pems-bay/pems-bay.h5" in readme
+    assert "data/raw/pems-bay/adj_mx_bay.pkl" in readme
