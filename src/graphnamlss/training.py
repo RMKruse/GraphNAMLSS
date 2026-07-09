@@ -11,7 +11,12 @@ from graphnamlss.config import ConfigError, ExperimentConfig
 from graphnamlss.graph_encoder import GraphMetadata
 from graphnamlss.likelihood import positive_scale
 from graphnamlss.local_shape import CenteredLocalShapeFunctions
-from graphnamlss.metrics import GaussianMetricReport, gaussian_metric_report
+from graphnamlss.metrics import (
+    GaussianMetricReport,
+    PointMetricReport,
+    gaussian_metric_report,
+    point_metric_report,
+)
 from graphnamlss.testing import load_synthetic_traffic_fixture_from_config
 from graphnamlss.traffic_data import load_metr_la_traffic_fixture_from_config
 from graphnamlss.traffic_scaling import TrafficScalingPolicy, fit_traffic_scaling_policy
@@ -23,12 +28,15 @@ __all__ = [
     "train_deterministic_namlss_on_traffic",
     "train_tracer_bullet_graph_namlss_on_traffic",
     "train_distributional_gnn_baseline_on_traffic",
+    "train_point_gnn_reference_on_traffic",
 ]
 
 
 def train_namlss_on_traffic(
     config: ExperimentConfig, *, seed: int = 20250214
 ) -> dict[str, Any]:
+    if _is_point_gnn_reference_config(config):
+        return train_point_gnn_reference_on_traffic(config, seed=seed)
     if _is_distributional_gnn_baseline_config(config):
         return train_distributional_gnn_baseline_on_traffic(config, seed=seed)
     if _is_tracer_bullet_graph_config(config):
@@ -67,6 +75,14 @@ def train_distributional_gnn_baseline_on_traffic(
     _validate_distributional_gnn_training_config(config)
     fixture = _load_traffic_fixture(config, seed=seed)
     return _train_distributional_gnn_baseline_on_fixture(config, fixture, seed=seed)
+
+
+def train_point_gnn_reference_on_traffic(
+    config: ExperimentConfig, *, seed: int = 20250214
+) -> dict[str, Any]:
+    _validate_point_gnn_reference_training_config(config)
+    fixture = _load_traffic_fixture(config, seed=seed)
+    return _train_point_gnn_reference_on_fixture(config, fixture, seed=seed)
 
 
 def _train_deterministic_namlss_on_fixture(
@@ -257,6 +273,121 @@ def _train_distributional_gnn_baseline_on_fixture(
                 )
             ),
             "sigma": sum(train_sigma) / len(train_sigma),
+        },
+    }
+
+    _write_training_artifacts(config.output.directory, resolved, output)
+    return output
+
+
+def _train_point_gnn_reference_on_fixture(
+    config: ExperimentConfig, fixture: Any, *, seed: int
+) -> dict[str, Any]:
+    splits = fixture.temporal_split_observations(
+        train=config.split.train,
+        validation=config.split.validation,
+        test=config.split.test,
+    )
+    scaling_policy = fit_traffic_scaling_policy(splits["train"])
+    scaled_splits = {
+        split_name: scaling_policy.transform_split(split)
+        for split_name, split in splits.items()
+    }
+    graph_state = _fit_point_gnn_state(
+        config,
+        scaled_splits["train"].observations,
+        fixture,
+    )
+    predictions = {
+        split_name: _point_gnn_prediction_for_split(
+            graph_state,
+            split.observations,
+        )
+        for split_name, split in scaled_splits.items()
+    }
+    metrics = {
+        split_name: _point_metrics_for_split(
+            predictions[split_name], split.observations
+        )
+        for split_name, split in scaled_splits.items()
+    }
+
+    resolved = config.to_resolved_dict()
+    resolved["train"] = True
+    resolved["training_seed"] = seed
+
+    loss = {split_name: report.rmse for split_name, report in metrics.items()}
+    history = [
+        {
+            "epoch": epoch,
+            "loss": loss["train"],
+            "optimizer": config.optimizer.name,
+        }
+        for epoch in range(1, config.optimizer.max_epochs + 1)
+    ]
+    split_summary = {
+        split_name: _split_summary(split.observations)
+        for split_name, split in scaled_splits.items()
+    }
+
+    output = {
+        "run_name": config.output.run_name,
+        "model": {
+            "family": config.model.family,
+            "variant": config.model.variant,
+            "distribution": config.model.distribution,
+            "prediction_type": "point",
+            "role": "point_prediction_reference",
+        },
+        "loss": loss,
+        "metrics": {
+            split_name: _point_metric_report_dict(report)
+            for split_name, report in metrics.items()
+        },
+        "resolved_config": resolved,
+        "reference": {
+            "prediction_type": "point",
+            "role": "point_prediction_reference",
+            "evaluated_with": ["mae", "rmse"],
+        },
+        "scaling": _scaling_summary(config, scaling_policy),
+        "missingness": {
+            "target_policy": config.missingness.target,
+            "covariate_policy": config.missingness.covariates,
+            "fixture": fixture.missingness_report().__dict__,
+        },
+        "features": {
+            "local": list(config.features.local),
+            "neighbor": list(config.features.neighbor),
+            "local_metadata": [
+                feature.__dict__ for feature in fixture.local_feature_metadata
+            ],
+            "neighbor_metadata": [
+                feature.__dict__ for feature in fixture.neighbor_feature_metadata
+            ],
+        },
+        "graph": {
+            "representation": config.model.graph_representation,
+            "encoder": config.model.graph_encoder,
+            "injection": config.model.graph_injection,
+            "self_feature_access": config.model.graph_stream_self_feature_access,
+            "node_count": len(fixture.sensors),
+            "edge_count": len(fixture.adjacency),
+            "feature_names": list(graph_state["feature_names"]),
+            "embedding_dim": graph_state["embedding_dim"],
+        },
+        "splits": split_summary,
+        "training_history": history,
+        "parameters": {
+            "intercept_mu": graph_state["intercept_mu"],
+            "graph_weights_mu": dict(
+                zip(
+                    graph_state["embedding_names"],
+                    graph_state["graph_weights_mu"],
+                    strict=True,
+                )
+            ),
+            "sigma": None,
         },
     }
 
@@ -520,6 +651,30 @@ def _validate_distributional_gnn_training_config(config: ExperimentConfig) -> No
     _validate_traffic_policy_config(config)
 
 
+def _validate_point_gnn_reference_training_config(config: ExperimentConfig) -> None:
+    if not _is_synthetic_config(config) and config.dataset.name != "METR-LA":
+        raise ConfigError(
+            "Point GNN reference training supports synthetic traffic and METR-LA."
+        )
+    if config.model.distribution != "conditional_mean":
+        raise ConfigError("Point GNN reference training requires conditional_mean.")
+    if not _is_point_gnn_reference_config(config):
+        raise ConfigError(
+            "Point GNN reference training requires "
+            "model.family=PointGNN, model.variant=reference, "
+            "graph_representation=shared, graph_injection=direct_mean, "
+            "graph_stream_self_feature_access=neighbor_focused, and "
+            "graph_encoder=graphsage."
+        )
+    if config.graph is None:
+        raise ConfigError("Point GNN reference training requires graph metadata.")
+    if not config.features.neighbor:
+        raise ConfigError(
+            "Point GNN reference training requires neighbor graph features."
+        )
+    _validate_traffic_policy_config(config)
+
+
 def _validate_deterministic_model_config(config: ExperimentConfig) -> None:
     if config.model.family != "NAMLSS" or config.model.variant != "deterministic_local":
         raise ConfigError(
@@ -561,6 +716,17 @@ def _is_distributional_gnn_baseline_config(config: ExperimentConfig) -> bool:
         and config.model.variant == "baseline"
         and config.model.graph_representation == "shared"
         and config.model.graph_injection == "direct_distributional_parameters"
+        and config.model.graph_stream_self_feature_access == "neighbor_focused"
+        and config.model.graph_encoder == "graphsage"
+    )
+
+
+def _is_point_gnn_reference_config(config: ExperimentConfig) -> bool:
+    return (
+        config.model.family == "PointGNN"
+        and config.model.variant == "reference"
+        and config.model.graph_representation == "shared"
+        and config.model.graph_injection == "direct_mean"
         and config.model.graph_stream_self_feature_access == "neighbor_focused"
         and config.model.graph_encoder == "graphsage"
     )
@@ -862,6 +1028,52 @@ def _fit_distributional_gnn_state(
     }
 
 
+def _fit_point_gnn_state(
+    config: ExperimentConfig,
+    train_observations: Sequence[Any],
+    fixture: Any,
+) -> dict[str, Any]:
+    feature_names = tuple(config.features.neighbor)
+    metadata = GraphMetadata.from_edges(
+        node_ids=fixture.sensors,
+        edges=fixture.adjacency,
+        use_edge_weights=True,
+    )
+    train_embeddings = _graph_embeddings_by_observation(
+        train_observations,
+        feature_names=feature_names,
+        metadata=metadata,
+    )
+    embedding_centers = _embedding_centers(train_embeddings.values(), feature_names)
+    examples = tuple(
+        (
+            _center_embedding(
+                train_embeddings[(observation.sensor_id, observation.time_index)],
+                embedding_centers,
+            ),
+            float(observation.target_speed),
+        )
+        for observation in train_observations
+        if not observation.target_missing and observation.target_speed is not None
+    )
+    if not examples:
+        raise ConfigError(
+            "Point GNN reference training requires observed training targets."
+        )
+
+    intercept_mu, graph_weights_mu = _fit_graph_parameter(examples, feature_names)
+    return {
+        "metadata": metadata,
+        "feature_names": feature_names,
+        "embedding_names": feature_names,
+        "embedding_dim": len(feature_names),
+        "embedding_centers": embedding_centers,
+        "intercept_mu": intercept_mu,
+        "graph_weights_mu": graph_weights_mu,
+        "parameter_names": ("mu",),
+    }
+
+
 def _distributional_gnn_prediction_for_split(
     graph_state: Mapping[str, Any],
     observations: Sequence[Any],
@@ -893,6 +1105,29 @@ def _distributional_gnn_prediction_for_split(
         for observation in observations
     )
     return _prediction_from_eta(eta)
+
+
+def _point_gnn_prediction_for_split(
+    graph_state: Mapping[str, Any],
+    observations: Sequence[Any],
+) -> dict[str, tuple[float, ...]]:
+    embeddings = _graph_embeddings_by_observation(
+        observations,
+        feature_names=graph_state["feature_names"],
+        metadata=graph_state["metadata"],
+    )
+    mu = tuple(
+        _linear_predict(
+            graph_state["intercept_mu"],
+            graph_state["graph_weights_mu"],
+            _center_embedding(
+                embeddings[(observation.sensor_id, observation.time_index)],
+                graph_state["embedding_centers"],
+            ),
+        )
+        for observation in observations
+    )
+    return {"mu": mu}
 
 
 def _graph_contribution_for_split(
@@ -1123,6 +1358,25 @@ def _metrics_for_split(
     )
 
 
+def _point_metrics_for_split(
+    prediction: Mapping[str, tuple[float, ...]], observations: Sequence[Any]
+) -> PointMetricReport:
+    targets = tuple(
+        0.0 if observation.target_speed is None else float(observation.target_speed)
+        for observation in observations
+    )
+    mask = tuple(
+        (not observation.target_missing) and observation.target_speed is not None
+        for observation in observations
+    )
+    return point_metric_report(
+        mu=prediction["mu"],
+        target=targets,
+        mask=mask,
+        unit="standardized_traffic",
+    )
+
+
 def _metric_report_dict(report: GaussianMetricReport) -> dict[str, Any]:
     return {
         "unit": report.unit,
@@ -1132,6 +1386,15 @@ def _metric_report_dict(report: GaussianMetricReport) -> dict[str, Any]:
         "interval_level": report.interval_level,
         "interval_coverage": report.interval_coverage,
         "pit_values": list(report.pit_values),
+        "mae": report.mae,
+        "rmse": report.rmse,
+    }
+
+
+def _point_metric_report_dict(report: PointMetricReport) -> dict[str, Any]:
+    return {
+        "unit": report.unit,
+        "observed_count": report.observed_count,
         "mae": report.mae,
         "rmse": report.rmse,
     }

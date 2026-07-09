@@ -71,12 +71,46 @@ class DistributionalGNNBaseline(_Module):
         }
 
 
+class PointGNNReference(_Module):
+    """Mean-only graph reference for point-accuracy guardrails."""
+
+    def __init__(
+        self,
+        *,
+        input_dim: int,
+        embedding_dim: int,
+        num_layers: int = 1,
+    ) -> None:
+        torch_module = _require_torch()
+        super().__init__()
+        self.encoder = TracerBulletGraphEncoder(
+            input_dim=input_dim,
+            embedding_dim=embedding_dim,
+            num_layers=num_layers,
+        )
+        self.mean_head = torch_module.nn.Linear(embedding_dim, 1)
+
+    def forward(
+        self,
+        graph_input: GraphEncoderInput | Any,
+        metadata: GraphMetadata | None = None,
+        *,
+        use_edge_weights: bool = True,
+    ) -> dict[str, Any]:
+        embeddings = self.encoder(
+            graph_input,
+            metadata,
+            use_edge_weights=use_edge_weights,
+        )
+        return {"mu": self.mean_head(embeddings).squeeze(-1)}
+
+
 def _require_torch() -> Any:
     if torch is None:
         raise ModuleNotFoundError(
-            "DistributionalGNNBaseline requires the optional 'torch' dependency."
+            "Graph GNN models require the optional 'torch' dependency."
         )
     return torch
 
 
-__all__ = ["DistributionalGNNBaseline"]
+__all__ = ["DistributionalGNNBaseline", "PointGNNReference"]

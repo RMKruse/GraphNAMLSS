@@ -12,7 +12,9 @@ from graphnamlss.likelihood import gaussian_nll
 
 __all__ = [
     "GaussianMetricReport",
+    "PointMetricReport",
     "gaussian_metric_report",
+    "point_metric_report",
 ]
 
 
@@ -28,6 +30,14 @@ class GaussianMetricReport:
     interval_level: float
     interval_coverage: float
     pit_values: tuple[float, ...]
+    mae: float
+    rmse: float
+
+
+@dataclass(frozen=True)
+class PointMetricReport:
+    unit: str
+    observed_count: int
     mae: float
     rmse: float
 
@@ -77,6 +87,25 @@ def gaussian_metric_report(
     )
 
 
+def point_metric_report(
+    *,
+    mu: Any,
+    target: Any,
+    mask: Any | None = None,
+    unit: str,
+) -> PointMetricReport:
+    """Return point-accuracy metrics over observed targets."""
+    observations = _observed_point_observations(mu=mu, target=target, mask=mask)
+    errors = tuple(mean - observed_target for mean, observed_target in observations)
+
+    return PointMetricReport(
+        unit=_metric_unit(unit),
+        observed_count=len(observations),
+        mae=sum(abs(error) for error in errors) / len(errors),
+        rmse=math.sqrt(sum(error**2 for error in errors) / len(errors)),
+    )
+
+
 def _gaussian_crps(mean: float, scale: float, observed_target: float) -> float:
     standardized_residual = (observed_target - mean) / scale
     return scale * (
@@ -119,6 +148,33 @@ def _observed_gaussian_observations(
 
     if not observations:
         raise ValueError("Gaussian metrics require at least one observed target.")
+    return tuple(observations)
+
+
+def _observed_point_observations(
+    *,
+    mu: Any,
+    target: Any,
+    mask: Any | None,
+) -> tuple[tuple[float, float], ...]:
+    targets = _as_float_tuple(target, "target")
+    mus = _broadcast_or_match(_as_float_tuple(mu, "mu"), len(targets), "mu")
+    masks = (
+        (True,) * len(targets)
+        if mask is None
+        else _broadcast_or_match(_as_bool_tuple(mask), len(targets), "mask")
+    )
+
+    observations = []
+    for mean, observed_target, observed in zip(mus, targets, masks, strict=True):
+        if not observed:
+            continue
+        if not math.isfinite(mean) or not math.isfinite(observed_target):
+            raise ValueError("Point metric values must be finite.")
+        observations.append((mean, observed_target))
+
+    if not observations:
+        raise ValueError("Point metrics require at least one observed target.")
     return tuple(observations)
 
 

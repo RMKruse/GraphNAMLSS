@@ -1,6 +1,6 @@
 from importlib.metadata import version
 
-from graphnamlss.distributional_gnn import DistributionalGNNBaseline
+from graphnamlss.distributional_gnn import DistributionalGNNBaseline, PointGNNReference
 from graphnamlss.graph_contribution import (
     CenteredGraphContribution,
     GraphContributionResult,
@@ -23,6 +23,7 @@ __all__ = [
     "GraphEncoderInput",
     "GraphMetadata",
     "LocalShapeResult",
+    "PointGNNReference",
     "TracerBulletGraphEncoder",
     "__version__",
     "aggregate_neighbor_features",

@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from graphnamlss.metrics import gaussian_metric_report
+from graphnamlss.metrics import gaussian_metric_report, point_metric_report
 
 
 def test_gaussian_metric_report_includes_nll_and_crps_for_standard_normal_examples():
@@ -50,6 +50,20 @@ def test_gaussian_metric_report_masks_distributional_and_point_metrics():
     assert report.pit_values == pytest.approx((0.5, _normal_cdf(1.0)))
     assert report.interval_level == pytest.approx(0.5)
     assert report.interval_coverage == pytest.approx(0.5)
+    assert report.mae == pytest.approx(1.0)
+    assert report.rmse == pytest.approx(math.sqrt(2.0))
+
+
+def test_point_metric_report_masks_point_accuracy_metrics():
+    report = point_metric_report(
+        mu=[0.0, 100.0, 2.0],
+        target=[0.0, -999.0, 4.0],
+        mask=[True, False, True],
+        unit="original_traffic",
+    )
+
+    assert report.unit == "original_traffic"
+    assert report.observed_count == 2
     assert report.mae == pytest.approx(1.0)
     assert report.rmse == pytest.approx(math.sqrt(2.0))
 
