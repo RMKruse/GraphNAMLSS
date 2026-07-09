@@ -26,3 +26,14 @@ def test_readme_documents_pems_bay_replication_artifacts():
     assert "configs/pems_bay.yaml" in readme
     assert "data/raw/pems-bay/pems-bay.h5" in readme
     assert "data/raw/pems-bay/adj_mx_bay.pkl" in readme
+
+
+def test_merit_probe_training_standard_is_recorded_as_an_adr():
+    decision = Path(
+        "docs/adr/0004-require-optimizer-trained-graphnamlss-for-merit-probe.md"
+    ).read_text()
+
+    assert "optimizer-trained GraphNAMLSS" in decision
+    assert "deterministic Tracer-Bullet Fit" in decision
+    assert "optimizer_trained_graph_namlss_training" in decision
+    assert "Further-Investment Gate" in decision

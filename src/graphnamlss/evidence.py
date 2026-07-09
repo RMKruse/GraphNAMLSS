@@ -30,6 +30,13 @@ class MeritProbeDecisionGate:
 
 
 @dataclass(frozen=True)
+class MeritProbeTrainingStandard:
+    concept_demonstrator_fit: str
+    merit_probe_fit: str
+    next_implementation_path: str
+
+
+@dataclass(frozen=True)
 class MeritProbeFailureRule:
     next_step: str
     diagnostic_areas: tuple[str, ...]
@@ -49,6 +56,7 @@ class MeritProbeEvidenceContract:
     dataset: str
     primary_comparison: MeritProbePrimaryComparison
     secondary_context: tuple[MeritProbeSecondaryContext, ...]
+    training_standard: MeritProbeTrainingStandard
     further_investment_gate: MeritProbeDecisionGate
     failure_rule: MeritProbeFailureRule
     replication_gate: MeritProbeReplicationGate
@@ -75,6 +83,7 @@ def load_merit_probe_evidence_contract(
         )
 
     comparison = _required_mapping(raw, "primary_comparison")
+    training_standard = _required_mapping(raw, "training_standard")
     decision_gate = _required_mapping(raw, "further_investment_gate")
     failure_rule = _required_mapping(raw, "failure_rule")
     replication_gate = _required_mapping(raw, "replication_gate")
@@ -91,6 +100,15 @@ def load_merit_probe_evidence_contract(
                 role=_required_str(entry, "role"),
             )
             for entry in _required_mapping_sequence(raw, "secondary_context")
+        ),
+        training_standard=MeritProbeTrainingStandard(
+            concept_demonstrator_fit=_required_str(
+                training_standard, "concept_demonstrator_fit"
+            ),
+            merit_probe_fit=_required_str(training_standard, "merit_probe_fit"),
+            next_implementation_path=_required_str(
+                training_standard, "next_implementation_path"
+            ),
         ),
         further_investment_gate=MeritProbeDecisionGate(
             preferred_distributional_signals=_required_str_sequence(
@@ -146,6 +164,16 @@ def _validate_merit_probe_evidence_contract(
             "Secondary context must label distributional_gnn_baseline as "
             "distributional_secondary_context and point_gnn_reference as "
             "point_accuracy_guardrail."
+        )
+
+    if (
+        contract.training_standard.merit_probe_fit
+        != "optimizer_trained_graph_namlss"
+    ):
+        raise EvidenceContractError(
+            "Merit Probe Training Standard requires optimizer-trained "
+            "GraphNAMLSS evidence; the deterministic Tracer-Bullet Fit is limited "
+            "to the Concept Demonstrator."
         )
 
     gate = contract.further_investment_gate

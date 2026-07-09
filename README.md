@@ -140,6 +140,12 @@ point-accuracy guardrail rather than a distributional peer. The
 Further-Investment Gate looks first for an NLL or CRPS signal while treating
 coverage, PIT, MAE, and RMSE as guardrails.
 
+The Merit Probe candidate must come from an optimizer-trained GraphNAMLSS path.
+The deterministic Tracer-Bullet Fit is limited to the Concept Demonstrator and
+cannot supply evidence for the Further-Investment Gate. The named follow-up path
+is `optimizer_trained_graph_namlss_training`; ADR 0004 records the rationale and
+scope limits.
+
 If that signal is unclear, the next step is diagnosis—not PEMS-BAY replication,
 the full Primary Experiment Matrix, Bayesian graph streams, or medical
 applications. PEMS-BAY becomes the Replication Gate only after a promising

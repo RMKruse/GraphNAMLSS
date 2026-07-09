@@ -8,6 +8,10 @@ secondary_context:
     role: distributional_secondary_context
   - model: point_gnn_reference
     role: point_accuracy_guardrail
+training_standard:
+  concept_demonstrator_fit: deterministic_tracer_bullet_fit
+  merit_probe_fit: optimizer_trained_graph_namlss
+  next_implementation_path: optimizer_trained_graph_namlss_training
 further_investment_gate:
   preferred_distributional_signals:
     - nll

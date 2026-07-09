@@ -185,7 +185,7 @@ The first real-data Merit Probe for GraphNAMLSS, using the METR-LA Traffic Netwo
 _Avoid_: requiring PEMS-BAY replication before deciding whether the first real benchmark is promising
 
 **Merit Probe Training Standard**:
-The training standard for real benchmark evidence: the METR-LA Merit Probe should use an optimizer-trained GraphNAMLSS path that matches the conceptual architecture, or explicitly justify why a deterministic fitting path is the intended model rather than only a demo simplification.
+The training standard for real benchmark evidence: the METR-LA Merit Probe requires an optimizer-trained GraphNAMLSS path that matches the conceptual architecture. The deterministic Tracer-Bullet Fit remains a Concept Demonstrator simplification and cannot satisfy the Further-Investment Gate.
 _Avoid_: basing the Further-Investment Gate on a simplified implementation whose relationship to the claimed model is unclear
 
 **METR-LA Merit Probe Primary Comparison**:

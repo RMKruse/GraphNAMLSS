@@ -37,6 +37,33 @@ def test_metr_la_merit_probe_exposes_the_first_real_data_primary_comparison():
     )
 
 
+def test_merit_probe_requires_optimizer_trained_graph_namlss_evidence():
+    contract = _load_contract()
+
+    assert (
+        contract.training_standard.merit_probe_fit
+        == "optimizer_trained_graph_namlss"
+    )
+
+
+def test_training_standard_identifies_the_concept_demonstrator_fit():
+    contract = _load_contract()
+
+    assert (
+        contract.training_standard.concept_demonstrator_fit
+        == "deterministic_tracer_bullet_fit"
+    )
+
+
+def test_training_standard_names_the_next_implementation_path():
+    contract = _load_contract()
+
+    assert (
+        contract.training_standard.next_implementation_path
+        == "optimizer_trained_graph_namlss_training"
+    )
+
+
 def test_metr_la_merit_probe_labels_secondary_context_by_evidence_role():
     contract = _load_contract()
 
@@ -97,6 +124,17 @@ def test_loader_rejects_a_point_gnn_without_its_guardrail_role(tmp_path):
     )
 
     with pytest.raises(EvidenceContractError, match="point_accuracy_guardrail"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_the_demo_fit_as_merit_probe_evidence(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path,
+        "merit_probe_fit: optimizer_trained_graph_namlss",
+        "merit_probe_fit: deterministic_tracer_bullet_fit",
+    )
+
+    with pytest.raises(EvidenceContractError, match="Training Standard"):
         load_merit_probe_evidence_contract(invalid_path)
 
 
