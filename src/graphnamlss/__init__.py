@@ -1,5 +1,9 @@
 from importlib.metadata import version
 
+from graphnamlss.graph_contribution import (
+    CenteredGraphContribution,
+    GraphContributionResult,
+)
 from graphnamlss.graph_encoder import (
     GraphEncoderInput,
     GraphMetadata,
@@ -11,7 +15,9 @@ from graphnamlss.local_shape import CenteredLocalShapeFunctions, LocalShapeResul
 __version__ = version("graphnamlss")
 
 __all__ = [
+    "CenteredGraphContribution",
     "CenteredLocalShapeFunctions",
+    "GraphContributionResult",
     "GraphEncoderInput",
     "GraphMetadata",
     "LocalShapeResult",
