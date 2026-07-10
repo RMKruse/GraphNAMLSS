@@ -40,6 +40,43 @@ $$
 \sigma_{it}=\operatorname{softplus}(\eta_{\sigma,it})+\varepsilon.
 $$
 
+### Modellzerlegung als Datenfluss
+
+```mermaid
+flowchart LR
+    X["Lokale Kovariaten<br/>x₁, …, xₚ"]
+    G["Graph G und<br/>Nachbarschaftszustände"]
+
+    subgraph M["Lageparameter"]
+        FM["Lokale Shape Functions<br/>fμⱼ(xⱼ)"]
+        SM["Interzept βμ₀ +<br/>Summe lokaler Beiträge"]
+        GM["Zentrierter Graphbeitrag<br/>αμ · gμ(i,t;G)"]
+        EM["Additiver Prädiktor ημ"]
+        IM["Identitätslink"]
+        MU["Lage μ"]
+    end
+
+    subgraph S["Skalenparameter"]
+        FS["Lokale Shape Functions<br/>fσⱼ(xⱼ)"]
+        SS["Interzept βσ₀ +<br/>Summe lokaler Beiträge"]
+        GS["Zentrierter Graphbeitrag<br/>ασ · gσ(i,t;G)"]
+        ES["Additiver Prädiktor ησ"]
+        PS["Softplus + ε"]
+        SIG["Skala σ > 0"]
+    end
+
+    X --> FM --> SM --> EM --> IM --> MU
+    X --> FS --> SS --> ES --> PS --> SIG
+    G --> GM
+    GM -.->|GraphNAMLSS-Erweiterung| EM
+    G --> GS
+    GS -.->|GraphNAMLSS-Erweiterung| ES
+    MU --> D["Prädiktive Verteilung<br/>N(μ, σ²)"]
+    SIG --> D
+```
+
+Die durchgezogenen Pfade zeigen den klassischen NAMLSS-Gedanken: Jede Kovariate kann über eine eigene Shape Function zu jedem Verteilungsparameter beitragen. Die gestrichelten Pfade markieren die GraphNAMLSS-Erweiterung. Lage und Skala erhalten getrennte Graphbeiträge und Gates, sodass Graphstruktur die erwartete Ausprägung und die konditionale Unsicherheit unterschiedlich beeinflussen kann.
+
 Die Zerlegung ist die zentrale wissenschaftliche Eigenschaft des Modells: lokale Shape-Plots beschreiben kovariatenspezifische Effekte, Graphkarten zeigen räumlich-strukturelle Beiträge, und die Gates dienen als Diagnostik der parameterspezifischen Graphnutzung. Gate-Größen sind dabei weder kausale Attributionen noch alleiniger Nachweis eines empirischen Vorteils.
 
 GraphNAMLSS bezeichnet eine Modellfamilie. Die vollständige Untersuchung variiert drei Faktoren in einem $2\times2\times2$-Design:
