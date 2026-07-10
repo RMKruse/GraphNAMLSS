@@ -22,6 +22,54 @@ The repo includes `.python-version` with `3.12` so Python version managers use t
 
 The mandatory runtime dependencies stay minimal for package imports. PyYAML backs the Simple Experiment Config loader, and the `dev` extra installs the test runner plus PyTorch so graph-model tests run in the standard development environment.
 
+## Guided Demo Path
+
+The Guided Demo Path gives a Methodologically Sympathetic Colleague one command
+and one primary report for understanding the Concept Demonstrator. From the
+repository root with the development environment active, run:
+
+```bash
+graphnamlss demo --output outputs/concept-demo
+```
+
+The command writes the complete Concept Demo Bundle under
+`outputs/concept-demo`. When it finishes, open the primary generated report at
+`outputs/concept-demo/report/tracer_bullet_evaluation_report.md`.
+
+Read that report in this order:
+
+1. **Model Decomposition** — start with how the local additive predictor and
+   graph contribution combine for each distributional parameter.
+2. **Local Shape Contributions** — inspect
+   `report/assets/local_shape_mu.svg` and
+   `report/assets/local_shape_sigma.svg` to see the local additive effects for
+   location and scale.
+3. **Graph Contributions** — compare
+   `report/assets/graph_contribution_mu.svg` and
+   `report/assets/graph_contribution_sigma.svg`, then use
+   `runs/tracer-bullet-graph-namlss/graph_contributions.json` for the underlying
+   values.
+4. **Graph Gate Diagnostics** — inspect
+   `runs/tracer-bullet-graph-namlss/graph_gates.json` to see the
+   parameter-specific graph reliance diagnostic.
+5. **Metrics** — use the report table for the compact comparison and each
+   model's `metrics.json` under `runs/` for its recorded values.
+6. **Concept Demo Evidence Boundary** — finish with the limits on what the
+   synthetic run can establish before interpreting any result.
+
+The Concept Demo Bundle uses a synthetic Demo Fixture and a lightweight
+deterministic Tracer-Bullet Fit so colleagues can inspect the full modeling idea
+without downloading benchmark data. Synthetic demo metrics are sanity checks:
+they show that the experiment contract, model paths, artifacts, and report run
+end to end. They are not evidence that GraphNAMLSS outperforms baselines or
+improves calibration on real traffic data.
+
+This Concept Demonstrator is not the METR-LA Merit Probe. Its Tracer-Bullet Fit
+does not satisfy the Merit Probe Training Standard, which requires an
+optimizer-trained GraphNAMLSS evaluated on the real METR-LA benchmark. Use the
+demo to judge whether the decomposition is coherent and inspectable, not to
+make an empirical merit claim.
+
 ## Simple Experiment Config Dry Run
 
 The first tracer-bullet experiment contract is a YAML-backed Simple Experiment Config. The sample config validates the METR-LA tracer setup without downloading METR-LA or starting training:
