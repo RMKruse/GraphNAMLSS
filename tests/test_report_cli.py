@@ -122,6 +122,30 @@ def test_report_command_generates_tracer_bullet_evaluation_bundle(tmp_path):
 
     report = (output_dir / "tracer_bullet_evaluation_report.md").read_text()
     assert "# Tracer-Bullet Evaluation Report" in report
+    ordered_sections = [
+        "## GraphNAMLSS Model Decomposition",
+        "## Demo Data-Generating Story",
+        "## Local Shape Contributions",
+        "## Graph Contributions",
+        "## Graph Gate Diagnostics",
+        "## Metrics",
+        "## Concept Demo Evidence Boundary",
+        "## Tracer-Bullet Fit Disclosure",
+    ]
+    section_positions = [report.find(section) for section in ordered_sections]
+    assert all(position >= 0 for position in section_positions)
+    assert section_positions == sorted(section_positions)
+    assert "local lags explain routine traffic behavior" in report
+    assert "upstream congestion propagates through the graph" in report
+    assert "expected slowdown through the location parameter" in report
+    assert "increased uncertainty through the scale parameter" in report
+    assert "parameter-specific graph reliance diagnostic" in report
+    assert "not causal proof" in report
+    assert "not standalone evidence" in report
+    assert "metrics are sanity checks" in report
+    assert "not evidence that GraphNAMLSS outperforms baselines" in report
+    assert "lightweight deterministic Tracer-Bullet Fit" in report
+    assert "does not satisfy the Merit Probe Training Standard" in report
     assert "deterministic-metr-la" in report
     assert "NLL" in report
     assert "CRPS" in report

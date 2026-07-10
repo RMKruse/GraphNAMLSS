@@ -359,7 +359,19 @@ def _render_markdown(
         "",
         "This report consumes saved run artifacts only; it does not retrain models.",
         "",
-        "## Source Runs",
+        "## GraphNAMLSS Model Decomposition",
+        "",
+        "GraphNAMLSS combines local additive predictors with gated, centered graph "
+        "contributions for each distributional parameter.",
+        "",
+        "`parameter predictor = intercept + local shape contributions "
+        "+ gate × centered graph contribution`",
+        "",
+        "The local terms preserve NAMLSS-style feature interpretation; the "
+        "neighbor-focused graph stream adds parameter-specific graph context for "
+        "location (`mu`) and scale (`sigma`).",
+        "",
+        "### Source Runs",
         "",
         "| Role | Run | Family | Variant |",
         "|---|---|---|---|",
@@ -372,11 +384,60 @@ def _render_markdown(
             f"{model['family']} | {model['variant']} |"
         )
 
-    lines.extend(["", "## Distributional Metrics", ""])
+    lines.extend(
+        [
+            "",
+            "## Demo Data-Generating Story",
+            "",
+            "The Localized Congestion Spillover Demo Scenario separates ordinary "
+            "traffic behavior from graph-neighbor spillover; local lags explain routine "
+            "traffic behavior, while upstream congestion propagates through the graph "
+            "to a downstream sensor. Neighbor lag features expose the spillover as an "
+            "expected slowdown through the location parameter and increased uncertainty "
+            "through the scale parameter.",
+            "",
+            "## Local Shape Contributions",
+            "",
+            "These plots expose feature-wise local contributions before graph context "
+            "is added, keeping routine local behavior separately inspectable for `mu` "
+            "and `sigma`.",
+            "",
+            "![Local shape mu](assets/local_shape_mu.svg)",
+            "",
+            "![Local shape sigma](assets/local_shape_sigma.svg)",
+            "",
+            "## Graph Contributions",
+            "",
+            "The maps summarize saved, gated graph contributions by sensor and "
+            "distributional parameter. They complement rather than replace the local "
+            "shape contributions.",
+            "",
+            "### Graph Contribution Maps",
+            "",
+            "![Graph contribution mu](assets/graph_contribution_mu.svg)",
+            "",
+            "![Graph contribution sigma](assets/graph_contribution_sigma.svg)",
+            "",
+            "## Graph Gate Diagnostics",
+            "",
+            "Each gate is a parameter-specific graph reliance diagnostic for this fitted "
+            "demo model. Gate magnitude is not causal proof and is not standalone "
+            "evidence that graph information improves a distributional parameter.",
+            "",
+            "### Graph Contribution Gates",
+            "",
+            "| Parameter | Gate |",
+            "|---|---:|",
+        ]
+    )
+    for gate in summary["graph_contribution_gates"]:
+        lines.append(f"| {gate['parameter']} | {_fmt(gate['gate'])} |")
+
+    lines.extend(["", "## Metrics", "", "### Distributional Metrics", ""])
     for split_name in SPLIT_ORDER:
         lines.extend(
             [
-                f"### {split_name.title()}",
+                f"#### {split_name.title()}",
                 "",
                 "| Model | Observed | NLL | CRPS | Coverage | MAE | RMSE |",
                 "|---|---:|---:|---:|---:|---:|---:|",
@@ -392,7 +453,7 @@ def _render_markdown(
 
     lines.extend(
         [
-            "## Point Accuracy Reference",
+            "### Point Accuracy Reference",
             "",
             "| Split | Model | Observed | MAE | RMSE |",
             "|---|---|---:|---:|---:|",
@@ -408,7 +469,7 @@ def _render_markdown(
     lines.extend(
         [
             "",
-            "## PIT Summaries",
+            "### PIT Summaries",
             "",
             "| Model | Split | Count | PIT Mean | Below 0.1 | Above 0.9 |",
             "|---|---|---:|---:|---:|---:|",
@@ -427,29 +488,20 @@ def _render_markdown(
     lines.extend(
         [
             "",
-            "## Local Shape Plots",
+            "## Concept Demo Evidence Boundary",
             "",
-            "![Local shape mu](assets/local_shape_mu.svg)",
+            "The synthetic Concept Demo Bundle metrics are sanity checks for a runnable "
+            "and inspectable experiment contract. They are not evidence that GraphNAMLSS "
+            "outperforms baselines or improves calibration, and they cannot support the "
+            "Distributional Calibration Claim.",
             "",
-            "![Local shape sigma](assets/local_shape_sigma.svg)",
+            "## Tracer-Bullet Fit Disclosure",
             "",
-            "## Graph Contribution Gates",
-            "",
-            "| Parameter | Gate |",
-            "|---|---:|",
-        ]
-    )
-    for gate in summary["graph_contribution_gates"]:
-        lines.append(f"| {gate['parameter']} | {_fmt(gate['gate'])} |")
-
-    lines.extend(
-        [
-            "",
-            "## Graph Contribution Maps",
-            "",
-            "![Graph contribution mu](assets/graph_contribution_mu.svg)",
-            "",
-            "![Graph contribution sigma](assets/graph_contribution_sigma.svg)",
+            "The Concept Demonstrator uses a lightweight deterministic Tracer-Bullet Fit "
+            "to make the model decomposition and saved artifacts inspectable. This fit "
+            "does not satisfy the Merit Probe Training Standard; empirical claims require "
+            "an optimizer-trained GraphNAMLSS candidate evaluated on the METR-LA Merit "
+            "Probe.",
             "",
         ]
     )
