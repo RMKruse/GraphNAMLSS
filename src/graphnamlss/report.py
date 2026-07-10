@@ -43,6 +43,9 @@ def generate_tracer_bullet_evaluation_report(
     local_shape_plots = _local_shape_plots(runs)
     graph_contribution_maps = _graph_contribution_maps(graph_artifacts["contributions"])
     graph_contribution_gates = graph_artifacts["gates"]
+    graph_run_summary = runs["tracer_bullet_graph_namlss"]["summary"].get(
+        "graph", {}
+    )
 
     _write_local_shape_assets(assets_directory, local_shape_plots)
     _write_graph_contribution_assets(assets_directory, graph_contribution_maps)
@@ -54,6 +57,12 @@ def generate_tracer_bullet_evaluation_report(
         "local_shape_plots": local_shape_plots,
         "graph_contribution_maps": graph_contribution_maps,
         "graph_contribution_gates": graph_contribution_gates,
+        "graph_gate_fit": {
+            "estimation": graph_run_summary.get("gate_estimation", "not_recorded"),
+            "head_normalization": graph_run_summary.get(
+                "graph_head_normalization", "not_recorded"
+            ),
+        },
         "source_runs": {
             model_key: str(runs[model_key]["path"]) for model_key in MODEL_ORDER
         },
@@ -354,6 +363,11 @@ def _write_line_svg(
 def _render_markdown(
     summary: Mapping[str, Any], runs: Mapping[str, Mapping[str, Any]]
 ) -> str:
+    gate_fit = summary.get("graph_gate_fit", {})
+    deterministic_gate_factorization = (
+        gate_fit.get("estimation")
+        == "deterministic_unit_l2_head_factorization"
+    )
     lines = [
         "# Tracer-Bullet Evaluation Report",
         "",
@@ -420,9 +434,19 @@ def _render_markdown(
             "",
             "## Graph Gate Diagnostics",
             "",
-            "Each gate is a parameter-specific graph reliance diagnostic for this fitted "
-            "demo model. Gate magnitude is not causal proof and is not standalone "
-            "evidence that graph information improves a distributional parameter.",
+            (
+                "In this deterministic Tracer-Bullet Fit, each gate is the magnitude "
+                "of a fitted parameter-specific graph coefficient vector after its "
+                "graph head is normalized to unit L2 norm. This convention makes the "
+                "head/gate decomposition identifiable; it is not an end-to-end "
+                "optimizer-trained gate."
+                if deterministic_gate_factorization
+                else "Each gate is a parameter-specific graph reliance diagnostic for "
+                "this fitted demo model."
+            ),
+            "",
+            "Gate magnitude is not causal proof and is not standalone evidence that "
+            "graph information improves a distributional parameter.",
             "",
             "### Graph Contribution Gates",
             "",
@@ -505,7 +529,10 @@ def _render_markdown(
             "## Tracer-Bullet Fit Disclosure",
             "",
             "The Concept Demonstrator uses a lightweight deterministic Tracer-Bullet Fit "
-            "to make the model decomposition and saved artifacts inspectable. This fit "
+            "to make the model decomposition and saved artifacts inspectable. Its "
+            "location graph head is fitted to local-model residuals; its scale graph "
+            "head is fitted against Gaussian training NLL. The normalized graph-head "
+            "magnitudes define the reported gates. This fit "
             "does not satisfy the Merit Probe Training Standard; empirical claims require "
             "an optimizer-trained GraphNAMLSS candidate evaluated on the METR-LA Merit "
             "Probe.",

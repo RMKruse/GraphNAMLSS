@@ -45,6 +45,15 @@ traffic = [
   "numpy>=1.26",
   "pandas>=2.2"
 ]
+notebook = [
+  "ipykernel>=6.29",
+  "jupyterlab>=4.2",
+  "matplotlib>=3.8",
+  "nbclient>=0.10",
+  "nbconvert>=7.16",
+  "nbformat>=5.10",
+  "pandas>=2.2"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

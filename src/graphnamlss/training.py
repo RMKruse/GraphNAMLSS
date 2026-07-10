@@ -25,6 +25,11 @@ from graphnamlss.traffic_data import load_metr_la_traffic_fixture_from_config
 from graphnamlss.traffic_scaling import TrafficScalingPolicy, fit_traffic_scaling_policy
 
 
+TRACER_BULLET_SCALE_FIT_STEPS = 3000
+TRACER_BULLET_SCALE_LEARNING_RATE = 0.05
+TRACER_BULLET_SCALE_RIDGE = 1e-3
+
+
 __all__ = [
     "train_namlss_on_traffic",
     "train_deterministic_namlss_on_synthetic_traffic",
@@ -157,6 +162,7 @@ def _train_deterministic_namlss_on_fixture(
         },
         "splits": split_summary,
         "training_history": history,
+        "prediction_artifact": "predictions.json",
         "parameters": {
             "intercept_mu": intercept,
             "weights_mu": dict(zip(feature_names, weights, strict=True)),
@@ -165,6 +171,10 @@ def _train_deterministic_namlss_on_fixture(
     }
 
     _write_training_artifacts(config.output.directory, resolved, output)
+    _write_json(
+        config.output.directory / "predictions.json",
+        _prediction_artifact(predictions, scaled_splits, scaling_policy),
+    )
     return output
 
 
@@ -258,6 +268,7 @@ def _train_distributional_gnn_baseline_on_fixture(
         },
         "splits": split_summary,
         "training_history": history,
+        "prediction_artifact": "predictions.json",
         "parameters": {
             "intercept_mu": graph_state["intercept_mu"],
             "graph_weights_mu": dict(
@@ -280,6 +291,10 @@ def _train_distributional_gnn_baseline_on_fixture(
     }
 
     _write_training_artifacts(config.output.directory, resolved, output)
+    _write_json(
+        config.output.directory / "predictions.json",
+        _prediction_artifact(predictions, scaled_splits, scaling_policy),
+    )
     return output
 
 
@@ -381,6 +396,7 @@ def _train_point_gnn_reference_on_fixture(
         },
         "splits": split_summary,
         "training_history": history,
+        "prediction_artifact": "predictions.json",
         "parameters": {
             "intercept_mu": graph_state["intercept_mu"],
             "graph_weights_mu": dict(
@@ -395,6 +411,10 @@ def _train_point_gnn_reference_on_fixture(
     }
 
     _write_training_artifacts(config.output.directory, resolved, output)
+    _write_json(
+        config.output.directory / "predictions.json",
+        _prediction_artifact(predictions, scaled_splits, scaling_policy),
+    )
     return output
 
 
@@ -502,11 +522,14 @@ def _train_tracer_bullet_graph_namlss_on_fixture(
             "edge_count": len(fixture.adjacency),
             "feature_names": list(graph_state["feature_names"]),
             "embedding_dim": graph_state["embedding_dim"],
+            "gate_estimation": graph_state["gate_estimation"],
+            "graph_head_normalization": graph_state["graph_head_normalization"],
             "gate_artifact": "graph_gates.json",
             "contribution_artifact": "graph_contributions.json",
         },
         "splits": split_summary,
         "training_history": history,
+        "prediction_artifact": "predictions.json",
         "parameters": {
             "intercept_mu": intercept,
             "weights_mu": dict(zip(feature_names, weights, strict=True)),
@@ -529,6 +552,10 @@ def _train_tracer_bullet_graph_namlss_on_fixture(
     }
 
     _write_training_artifacts(config.output.directory, resolved, output)
+    _write_json(
+        config.output.directory / "predictions.json",
+        _prediction_artifact(predictions, scaled_splits, scaling_policy),
+    )
     _write_json(config.output.directory / "graph_gates.json", graph_gates)
     _write_json(
         config.output.directory / "graph_contributions.json", graph_contributions
@@ -945,21 +972,48 @@ def _fit_tracer_bullet_graph_state(
         metadata=metadata,
     )
     embedding_centers = _embedding_centers(train_embeddings.values(), feature_names)
-    graph_examples = tuple(
+    training_rows = tuple(
         (
             _center_embedding(
                 train_embeddings[(observation.sensor_id, observation.time_index)],
                 embedding_centers,
             ),
-            float(observation.target_speed) - float(eta_row[0]),
+            float(observation.target_speed),
+            float(eta_row[0]),
+            float(eta_row[1]),
         )
         for observation, eta_row in zip(train_observations, local_eta, strict=True)
         if not observation.target_missing and observation.target_speed is not None
     )
-    if not graph_examples:
+    if not training_rows:
         raise ConfigError("GraphNAMLSS training requires observed training targets.")
 
-    graph_weights_mu = _fit_graph_residual_weights(graph_examples, feature_names)
+    fitted_mu_coefficients = _fit_graph_residual_weights(
+        tuple(
+            (embedding, target - local_mu)
+            for embedding, target, local_mu, _local_sigma_eta in training_rows
+        ),
+        feature_names,
+    )
+    fitted_sigma_coefficients = _fit_graph_scale_weights(
+        tuple(
+            (
+                embedding,
+                target
+                - (
+                    local_mu
+                    + _dot(fitted_mu_coefficients, embedding)
+                ),
+                local_sigma_eta,
+            )
+            for embedding, target, local_mu, local_sigma_eta in training_rows
+        ),
+        feature_names,
+    )
+    graph_weights_mu, mu_gate = _factor_graph_head(fitted_mu_coefficients)
+    graph_weights_sigma, sigma_gate = _factor_graph_head(
+        fitted_sigma_coefficients
+    )
     return {
         "metadata": metadata,
         "feature_names": feature_names,
@@ -967,8 +1021,10 @@ def _fit_tracer_bullet_graph_state(
         "embedding_dim": len(feature_names),
         "embedding_centers": embedding_centers,
         "graph_weights_mu": graph_weights_mu,
-        "graph_weights_sigma": (0.0,) * len(feature_names),
-        "gates": {"mu": 1.0, "sigma": 1.0},
+        "graph_weights_sigma": graph_weights_sigma,
+        "gates": {"mu": mu_gate, "sigma": sigma_gate},
+        "gate_estimation": "deterministic_unit_l2_head_factorization",
+        "graph_head_normalization": "unit_l2",
         "parameter_names": ("mu", "sigma"),
     }
 
@@ -1300,6 +1356,57 @@ def _fit_graph_residual_weights(
     return _solve_linear_system(matrix, rhs)
 
 
+def _fit_graph_scale_weights(
+    examples: Sequence[tuple[Sequence[float], float, float]],
+    feature_names: Sequence[str],
+) -> tuple[float, ...]:
+    """Fit a centered graph scale head against Gaussian training NLL."""
+
+    weights = [0.0 for _ in feature_names]
+    for _step in range(TRACER_BULLET_SCALE_FIT_STEPS):
+        gradients = [0.0 for _ in feature_names]
+        for embedding, residual, local_sigma_eta in examples:
+            sigma_eta = local_sigma_eta + _dot(weights, embedding)
+            sigma = float(positive_scale(sigma_eta))
+            derivative = (
+                (1.0 / sigma) - ((residual * residual) / (sigma * sigma * sigma))
+            ) * _sigmoid(sigma_eta)
+            for index, value in enumerate(embedding):
+                gradients[index] += derivative * value
+
+        mean_gradients = tuple(
+            (gradient / len(examples))
+            + (TRACER_BULLET_SCALE_RIDGE * weights[index])
+            for index, gradient in enumerate(gradients)
+        )
+        if max(abs(gradient) for gradient in mean_gradients) < 1e-8:
+            break
+        for index, gradient in enumerate(mean_gradients):
+            weights[index] -= TRACER_BULLET_SCALE_LEARNING_RATE * gradient
+
+    if any(not math.isfinite(weight) for weight in weights):
+        raise ConfigError("Could not fit deterministic GraphNAMLSS scale head.")
+    return tuple(weights)
+
+
+def _factor_graph_head(
+    coefficients: Sequence[float],
+) -> tuple[tuple[float, ...], float]:
+    """Identify graph head and gate via a unit-L2 head convention."""
+
+    gate = math.sqrt(sum(coefficient * coefficient for coefficient in coefficients))
+    if gate < 1e-12:
+        return (0.0,) * len(coefficients), 0.0
+    return tuple(coefficient / gate for coefficient in coefficients), gate
+
+
+def _sigmoid(value: float) -> float:
+    if value >= 0.0:
+        return 1.0 / (1.0 + math.exp(-value))
+    exponential = math.exp(value)
+    return exponential / (1.0 + exponential)
+
+
 def _fit_graph_parameter(
     examples: Sequence[tuple[Sequence[float], float]], feature_names: Sequence[str]
 ) -> tuple[float, tuple[float, ...]]:
@@ -1454,6 +1561,72 @@ def _write_training_artifacts(
     _write_json(output_directory / "metrics.json", summary["metrics"])
     _write_json(output_directory / "training_history.json", summary["training_history"])
     _write_json(output_directory / "train_summary.json", summary)
+
+
+def _prediction_artifact(
+    predictions: Mapping[str, Mapping[str, Sequence[float]]],
+    scaled_splits: Mapping[str, Any],
+    scaling_policy: TrafficScalingPolicy,
+) -> dict[str, Any]:
+    """Serialize bounded, reader-facing predictions in original traffic units."""
+
+    has_sigma = all(
+        "sigma" in split_predictions for split_predictions in predictions.values()
+    )
+    split_rows: dict[str, list[dict[str, Any]]] = {}
+    for split_name, split_predictions in predictions.items():
+        rows = []
+        for index, observation in enumerate(scaled_splits[split_name].observations):
+            standardized_mu = float(split_predictions["mu"][index])
+            mu = (
+                standardized_mu * scaling_policy.target.scale
+                + scaling_policy.target.mean
+            )
+            standardized_target = (
+                None
+                if observation.target_speed is None
+                else float(observation.target_speed)
+            )
+            target = (
+                None
+                if standardized_target is None
+                else standardized_target * scaling_policy.target.scale
+                + scaling_policy.target.mean
+            )
+            standardized_sigma = (
+                float(split_predictions["sigma"][index]) if has_sigma else None
+            )
+            sigma = (
+                standardized_sigma * scaling_policy.target.scale
+                if standardized_sigma is not None
+                else None
+            )
+            timestamp = getattr(observation, "timestamp", None)
+            rows.append(
+                {
+                    "split": split_name,
+                    "sensor_id": observation.sensor_id,
+                    "time_index": observation.time_index,
+                    "timestamp": (
+                        timestamp.isoformat() if timestamp is not None else None
+                    ),
+                    "target": target,
+                    "target_missing": bool(observation.target_missing),
+                    "mu": mu,
+                    "sigma": sigma,
+                    "standardized": {
+                        "target": standardized_target,
+                        "mu": standardized_mu,
+                        "sigma": standardized_sigma,
+                    },
+                }
+            )
+        split_rows[split_name] = rows
+    return {
+        "prediction_type": "distributional" if has_sigma else "point",
+        "unit": "original_traffic",
+        "splits": split_rows,
+    }
 
 
 def _write_json(path: Path, payload: Mapping[str, Any] | Iterable[Any]) -> None:

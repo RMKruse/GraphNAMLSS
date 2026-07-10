@@ -51,7 +51,11 @@ Read that report in this order:
    values.
 4. **Graph Gate Diagnostics** — inspect
    `runs/tracer-bullet-graph-namlss/graph_gates.json` to see the
-   parameter-specific graph reliance diagnostic.
+   parameter-specific graph reliance diagnostic. In the deterministic
+   Tracer-Bullet Fit, each gate is the fitted graph coefficient-vector magnitude
+   after the corresponding graph head is normalized to unit L2 norm. This makes
+   the head/gate decomposition identifiable, but it is not an end-to-end
+   optimizer-trained gate.
 5. **Metrics** — use the report table for the compact comparison and each
    model's `metrics.json` under `runs/` for its recorded values.
 6. **Concept Demo Evidence Boundary** — finish with the limits on what the
@@ -76,6 +80,29 @@ The Concept Demonstrator does not implement Bayesian graph streams, structural
 uncertainty experiments, or medical application results. GAMLSS and BAMLSS
 remain future Statistical Baseline integrations through External Code Adapters;
 they are not completed Concept Demo Bundle requirements.
+
+## Tutorial Notebook
+
+The reader-facing tutorial notebook at
+`notebooks/01_graphnamlss_concept_walkthrough.ipynb` develops the Concept
+Demonstrator from the synthetic traffic story through the local and graph
+predictor components to numerical checks and visual results. It calls the
+package's demo path and consumes saved artifacts instead of reimplementing model
+logic in notebook cells.
+
+Install the notebook dependencies and open it from the repository root:
+
+```bash
+python -m pip install -e ".[notebook]"
+python -m jupyter lab notebooks/01_graphnamlss_concept_walkthrough.ipynb
+```
+
+For a reproducibility check, execute the notebook top-to-bottom:
+
+```bash
+python -m jupyter nbconvert --execute --to notebook --inplace \
+  notebooks/01_graphnamlss_concept_walkthrough.ipynb
+```
 
 ## Simple Experiment Config Dry Run
 

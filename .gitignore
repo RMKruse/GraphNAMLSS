@@ -53,6 +53,7 @@ cover/
 
 # Local experiment outputs
 runs/
+outputs/
 
 # Translations
 *.mo

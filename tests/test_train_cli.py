@@ -227,10 +227,16 @@ output:
     assert summary["graph"]["injection"] == "additive_graph_contribution"
     assert summary["graph"]["contribution_artifact"] == "graph_contributions.json"
     assert summary["graph"]["gate_artifact"] == "graph_gates.json"
-    assert graph_gates == [
-        {"parameter": "mu", "gate": 1.0},
-        {"parameter": "sigma", "gate": 1.0},
-    ]
+    assert [row["parameter"] for row in graph_gates] == ["mu", "sigma"]
+    assert all(row["gate"] >= 0.0 for row in graph_gates)
+    assert summary["graph"]["gate_estimation"] == (
+        "deterministic_unit_l2_head_factorization"
+    )
+    assert summary["graph"]["graph_head_normalization"] == "unit_l2"
+    assert any(
+        abs(weight) > 0.0
+        for weight in summary["parameters"]["graph_weights_sigma"].values()
+    )
     assert graph_contributions["parameter_names"] == ["mu", "sigma"]
     assert set(graph_contributions["splits"]) == {"train", "validation", "test"}
     assert len(graph_contributions["splits"]["train"]) == summary["splits"]["train"]["prediction_count"]
@@ -882,10 +888,12 @@ output:
     assert summary["scaling"]["target"]["fit_on"] == "train"
     assert summary["missingness"]["target_policy"] == "mask_missing_targets"
     assert summary["missingness"]["covariate_policy"] == "past_observed_lag_imputation"
-    assert graph_gates == [
-        {"parameter": "mu", "gate": 1.0},
-        {"parameter": "sigma", "gate": 1.0},
-    ]
+    assert [row["parameter"] for row in graph_gates] == ["mu", "sigma"]
+    assert all(row["gate"] >= 0.0 for row in graph_gates)
+    assert summary["graph"]["gate_estimation"] == (
+        "deterministic_unit_l2_head_factorization"
+    )
+    assert summary["graph"]["graph_head_normalization"] == "unit_l2"
     assert graph_contributions["parameter_names"] == ["mu", "sigma"]
     assert set(graph_contributions["splits"]) == {"train", "validation", "test"}
 
