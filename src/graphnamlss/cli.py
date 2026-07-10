@@ -11,6 +11,7 @@ from graphnamlss.config import (
     validate_experiment_artifacts,
     validate_experiment_config,
 )
+from graphnamlss.demo import run_concept_demo_bundle
 from graphnamlss.report import generate_tracer_bullet_evaluation_report
 from graphnamlss.training import train_namlss_on_traffic
 
@@ -45,6 +46,17 @@ def main(argv: list[str] | None = None) -> int:
     report_parser.add_argument("--point-gnn-run", required=True)
     report_parser.add_argument("--output", required=True)
 
+    demo_parser = subparsers.add_parser(
+        "demo", help="Run the complete synthetic Concept Demo Bundle."
+    )
+    demo_parser.add_argument("--output", required=True)
+    demo_parser.add_argument(
+        "--seed",
+        type=int,
+        default=20250214,
+        help="Concept Demo Fixture seed.",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "dry-run":
@@ -59,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
             point_gnn_run=Path(args.point_gnn_run),
             output_directory=Path(args.output),
         )
+    if args.command == "demo":
+        return _demo(Path(args.output), seed=args.seed)
 
     parser.error(f"Unknown command: {args.command}")
     return 2
@@ -116,6 +130,17 @@ def _report(
         )
     except (OSError, ValueError) as exc:
         print(f"Report error: {exc}", file=sys.stderr)
+        return 2
+
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0
+
+
+def _demo(output_directory: Path, *, seed: int) -> int:
+    try:
+        summary = run_concept_demo_bundle(output_directory, seed=seed)
+    except (ConfigError, OSError, ValueError) as exc:
+        print(f"Demo error: {exc}", file=sys.stderr)
         return 2
 
     print(json.dumps(summary, indent=2, sort_keys=True))

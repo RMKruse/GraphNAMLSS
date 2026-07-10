@@ -17,7 +17,10 @@ from graphnamlss.metrics import (
     gaussian_metric_report,
     point_metric_report,
 )
-from graphnamlss.testing import load_synthetic_traffic_fixture_from_config
+from graphnamlss.testing import (
+    load_localized_congestion_spillover_demo_fixture,
+    load_synthetic_traffic_fixture_from_config,
+)
 from graphnamlss.traffic_data import load_metr_la_traffic_fixture_from_config
 from graphnamlss.traffic_scaling import TrafficScalingPolicy, fit_traffic_scaling_policy
 
@@ -740,6 +743,8 @@ def _is_point_gnn_reference_config(config: ExperimentConfig) -> bool:
 
 
 def _load_traffic_fixture(config: ExperimentConfig, *, seed: int) -> Any:
+    if config.dataset.name == "synthetic-concept-demo":
+        return load_localized_congestion_spillover_demo_fixture(seed=seed)
     if _is_synthetic_config(config):
         return load_synthetic_traffic_fixture_from_config(config, seed=seed)
     return load_metr_la_traffic_fixture_from_config(config)
