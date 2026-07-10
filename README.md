@@ -70,6 +70,13 @@ optimizer-trained GraphNAMLSS evaluated on the real METR-LA benchmark. Use the
 demo to judge whether the decomposition is coherent and inspectable, not to
 make an empirical merit claim.
 
+### Current Concept Demonstrator Scope
+
+The Concept Demonstrator does not implement Bayesian graph streams, structural
+uncertainty experiments, or medical application results. GAMLSS and BAMLSS
+remain future Statistical Baseline integrations through External Code Adapters;
+they are not completed Concept Demo Bundle requirements.
+
 ## Simple Experiment Config Dry Run
 
 The first tracer-bullet experiment contract is a YAML-backed Simple Experiment Config. The sample config validates the METR-LA tracer setup without downloading METR-LA or starting training:
@@ -225,7 +232,7 @@ Targets and features are scaled using statistics fit on the training period only
 
 ## Baselines
 
-The baseline set includes both statistical and neural comparisons:
+The research plan includes both statistical and neural comparisons:
 
 - deterministic NAMLSS
 - GAMLSS
@@ -235,7 +242,11 @@ The baseline set includes both statistical and neural comparisons:
 - distributional GNN with direct location and scale heads
 - mean-only point GNN as a point-accuracy reference
 
-The statistical graph-feature baselines are important because they test whether learned graph representations add value beyond simple neighbor summaries.
+The current Concept Demo Bundle runs deterministic NAMLSS, the Tracer-Bullet
+GraphNAMLSS, the Distributional GNN Baseline, and the Point GNN Reference.
+GAMLSS, BAMLSS, and their graph-feature variants remain planned Statistical
+Baseline adapter context. When implemented, they will test whether learned graph
+representations add value beyond simple neighbor summaries.
 
 ## Evaluation
 

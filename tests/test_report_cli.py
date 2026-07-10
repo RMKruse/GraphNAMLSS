@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+from graphnamlss.testing.scope_guards import assert_concept_demo_scope
+
 
 def test_report_command_generates_tracer_bullet_evaluation_bundle(tmp_path):
     deterministic_run = _write_run(
@@ -121,6 +123,7 @@ def test_report_command_generates_tracer_bullet_evaluation_bundle(tmp_path):
     ]
 
     report = (output_dir / "tracer_bullet_evaluation_report.md").read_text()
+    assert_concept_demo_scope(report)
     assert "# Tracer-Bullet Evaluation Report" in report
     ordered_sections = [
         "## GraphNAMLSS Model Decomposition",
@@ -130,6 +133,7 @@ def test_report_command_generates_tracer_bullet_evaluation_bundle(tmp_path):
         "## Graph Gate Diagnostics",
         "## Metrics",
         "## Concept Demo Evidence Boundary",
+        "## Current Concept Demonstrator Scope",
         "## Tracer-Bullet Fit Disclosure",
     ]
     section_positions = [report.find(section) for section in ordered_sections]
@@ -144,6 +148,15 @@ def test_report_command_generates_tracer_bullet_evaluation_bundle(tmp_path):
     assert "not standalone evidence" in report
     assert "metrics are sanity checks" in report
     assert "not evidence that GraphNAMLSS outperforms baselines" in report
+    assert (
+        "does not implement Bayesian graph streams, structural uncertainty "
+        "experiments, or medical application results" in report
+    )
+    assert (
+        "GAMLSS and BAMLSS remain future Statistical Baseline integrations through "
+        "External Code Adapters" in report
+    )
+    assert "not completed Concept Demo Bundle requirements" in report
     assert "lightweight deterministic Tracer-Bullet Fit" in report
     assert "does not satisfy the Merit Probe Training Standard" in report
     assert "deterministic-metr-la" in report

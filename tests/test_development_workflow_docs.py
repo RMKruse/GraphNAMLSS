@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from graphnamlss.testing.scope_guards import assert_concept_demo_scope
+
 
 def test_readme_documents_guided_demo_command_and_report_location():
     readme = Path("README.md").read_text()
@@ -46,6 +48,22 @@ def test_readme_keeps_synthetic_demo_evidence_within_its_boundary():
     assert "lightweight deterministic Tracer-Bullet Fit" in readme
     assert "not the METR-LA Merit Probe" in readme
     assert "does not satisfy the Merit Probe Training Standard" in readme
+
+
+def test_readme_keeps_unimplemented_tracks_outside_the_concept_demonstrator():
+    readme = " ".join(Path("README.md").read_text().split())
+
+    assert_concept_demo_scope(readme)
+
+    assert (
+        "does not implement Bayesian graph streams, structural uncertainty "
+        "experiments, or medical application results" in readme
+    )
+    assert (
+        "GAMLSS and BAMLSS remain future Statistical Baseline integrations through "
+        "External Code Adapters" in readme
+    )
+    assert "not completed Concept Demo Bundle requirements" in readme
 
 
 def test_readme_documents_plain_pyproject_and_pyg_workflow():

@@ -495,6 +495,13 @@ def _render_markdown(
             "outperforms baselines or improves calibration, and they cannot support the "
             "Distributional Calibration Claim.",
             "",
+            "## Current Concept Demonstrator Scope",
+            "",
+            "The Concept Demonstrator does not implement Bayesian graph streams, "
+            "structural uncertainty experiments, or medical application results. GAMLSS "
+            "and BAMLSS remain future Statistical Baseline integrations through External "
+            "Code Adapters; they are not completed Concept Demo Bundle requirements.",
+            "",
             "## Tracer-Bullet Fit Disclosure",
             "",
             "The Concept Demonstrator uses a lightweight deterministic Tracer-Bullet Fit "
