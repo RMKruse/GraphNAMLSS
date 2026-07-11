@@ -25,12 +25,7 @@ $$
 
 Jeder Verteilungsparameter $k\in\{\mu,\sigma\}$ besitzt einen eigenen additiven Prädiktor:
 
-$$
-\eta_{k,it}
-= \beta_{k0}
-+ \sum_{j=1}^{p}\tilde f_{kj}(x_{j,it})
-+ \alpha_k\,\tilde g_{k}(i,t;G).
-$$
+$$ \eta_{k,it} = \beta_{k0} + \sum_{j=1}^{p}\tilde f_{kj}(x_{j,it}) + \alpha_k\,\tilde g_{k}(i,t;G). $$
 
 Dabei bezeichnet $\tilde f_{kj}$ eine zentrierte lokale Shape Function, $\tilde g_k$ einen zentrierten graphbasierten Beitrag und $\alpha_k$ ein parameterspezifisches Graph Contribution Gate. Die Zentrierung verhindert, dass lokale oder graphbasierte Terme den Interzept absorbieren. Für das gaußsche Location-Scale-Modell gelten
 
