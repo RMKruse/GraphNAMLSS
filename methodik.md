@@ -29,11 +29,7 @@ $$ \eta_{k,it} = \beta_{k0} + \sum_{j=1}^{p}\tilde f_{kj}(x_{j,it}) + \alpha_k\,
 
 Dabei bezeichnet $\tilde f_{kj}$ eine zentrierte lokale Shape Function, $\tilde g_k$ einen zentrierten graphbasierten Beitrag und $\alpha_k$ ein parameterspezifisches Graph Contribution Gate. Die Zentrierung verhindert, dass lokale oder graphbasierte Terme den Interzept absorbieren. Für das gaußsche Location-Scale-Modell gelten
 
-$$
-\mu_{it}=\eta_{\mu,it},
-\qquad
-\sigma_{it}=\operatorname{softplus}(\eta_{\sigma,it})+\varepsilon.
-$$
+$$ \mu_{it}=\eta_{\mu,it}, \qquad \sigma_{it}=\operatorname{softplus}(\eta_{\sigma,it})+\varepsilon. $$
 
 ### Modellzerlegung als Datenfluss
 
