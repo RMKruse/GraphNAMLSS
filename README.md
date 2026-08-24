@@ -81,6 +81,9 @@ uncertainty experiments, or medical application results. GAMLSS and BAMLSS
 remain future Statistical Baseline integrations through External Code Adapters;
 they are not completed Concept Demo Bundle requirements.
 
+The colleague review guide and freeze record live in
+`docs/concept-demonstrator-review.md`.
+
 ## Tutorial Notebook
 
 The reader-facing tutorial notebook at
