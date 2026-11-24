@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +25,61 @@ class MeritProbeSecondaryContext:
 
 
 @dataclass(frozen=True)
+class GatePrimarySignalRule:
+    """Thresholds are positive magnitudes on the mean paired difference."""
+
+    metric: str
+    difference: str
+    clear_improvement: float
+    meaningful_improvement: float
+
+
+@dataclass(frozen=True)
+class GateGuardrailRule:
+    """A degradation beyond serious_degradation on the mean paired difference."""
+
+    metric: str
+    statistic: str
+    difference: str
+    serious_degradation: float
+    interval_level: float | None
+
+
+@dataclass(frozen=True)
+class GateQualificationRun:
+    seed: int
+    evaluated_partitions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GateFailedSeedPolicy:
+    infrastructure_failure: str
+    training_failure: str
+    replacement: str
+
+
+@dataclass(frozen=True)
+class FurtherInvestmentGateRules:
+    """The pass, fail and inconclusive rules declared before the Merit Probe run."""
+
+    decision_record: str
+    evaluation_partition: str
+    paired_difference: str
+    gate_seeds: tuple[int, ...]
+    qualification_run: GateQualificationRun
+    minimum_completed_seeds: int
+    maximum_dissenting_seeds: int
+    primary_signals: tuple[GatePrimarySignalRule, ...]
+    guardrails: tuple[GateGuardrailRule, ...]
+    failed_seeds: GateFailedSeedPolicy
+    outcome_precedence: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MeritProbeDecisionGate:
-    preferred_distributional_signals: tuple[str, ...]
+    primary_distributional_signals: tuple[str, ...]
     guardrail_metrics: tuple[str, ...]
+    rules: FurtherInvestmentGateRules
 
 
 @dataclass(frozen=True)
@@ -111,11 +164,14 @@ def load_merit_probe_evidence_contract(
             ),
         ),
         further_investment_gate=MeritProbeDecisionGate(
-            preferred_distributional_signals=_required_str_sequence(
-                decision_gate, "preferred_distributional_signals"
+            primary_distributional_signals=_required_str_sequence(
+                decision_gate, "primary_distributional_signals"
             ),
             guardrail_metrics=_required_str_sequence(
                 decision_gate, "guardrail_metrics"
+            ),
+            rules=_further_investment_gate_rules(
+                _required_mapping(decision_gate, "declared_rules")
             ),
         ),
         failure_rule=MeritProbeFailureRule(
@@ -176,15 +232,7 @@ def _validate_merit_probe_evidence_contract(
             "to the Concept Demonstrator."
         )
 
-    gate = contract.further_investment_gate
-    if gate.preferred_distributional_signals != ("nll", "crps"):
-        raise EvidenceContractError(
-            "Further-Investment Gate must prefer NLL and CRPS."
-        )
-    if gate.guardrail_metrics != ("coverage", "pit", "mae", "rmse"):
-        raise EvidenceContractError(
-            "Further-Investment Gate must guard coverage, PIT, MAE, and RMSE."
-        )
+    _validate_further_investment_gate(contract.further_investment_gate)
 
     failure_rule = contract.failure_rule
     if (
@@ -220,6 +268,258 @@ def _validate_merit_probe_evidence_contract(
             "PEMS-BAY must be the generalization Replication Gate after a promising "
             "METR-LA Merit Probe."
         )
+
+
+_PRIMARY_SIGNALS = ("nll", "crps")
+_GUARDRAIL_STATISTICS = {
+    "coverage": "absolute_coverage_error",
+    "pit": "ks_distance_from_uniform",
+    "mae": "mae",
+    "rmse": "rmse",
+}
+_DIFFERENCE_FORMS = ("absolute", "relative")
+_QUALIFICATION_PARTITIONS = ("train", "validation")
+_FAILED_SEED_POLICY = GateFailedSeedPolicy(
+    infrastructure_failure="rerun_identical_seed_and_recipe",
+    training_failure="record_without_rerun",
+    replacement="never",
+)
+_OUTCOME_PRECEDENCE = (
+    "inconclusive_when_too_few_completed_seeds",
+    "fail_when_no_meaningful_primary_improvement",
+    "pass_when_gate_met",
+    "inconclusive_otherwise",
+)
+
+
+def _further_investment_gate_rules(
+    rules: dict[str, Any],
+) -> FurtherInvestmentGateRules:
+    qualification_run = _required_mapping(rules, "qualification_run")
+    failed_seeds = _required_mapping(rules, "failed_seeds")
+    return FurtherInvestmentGateRules(
+        decision_record=_required_str(rules, "decision_record"),
+        evaluation_partition=_required_str(rules, "evaluation_partition"),
+        paired_difference=_required_str(rules, "paired_difference"),
+        gate_seeds=_required_int_sequence(rules, "gate_seeds"),
+        qualification_run=GateQualificationRun(
+            seed=_required_int(qualification_run, "seed"),
+            evaluated_partitions=_required_str_sequence(
+                qualification_run, "evaluated_partitions"
+            ),
+        ),
+        minimum_completed_seeds=_required_int(rules, "minimum_completed_seeds"),
+        maximum_dissenting_seeds=_required_int(rules, "maximum_dissenting_seeds"),
+        primary_signals=tuple(
+            GatePrimarySignalRule(
+                metric=metric,
+                difference=_required_str(entry, "difference"),
+                clear_improvement=_required_positive_float(
+                    entry, "clear_improvement"
+                ),
+                meaningful_improvement=_required_positive_float(
+                    entry, "meaningful_improvement"
+                ),
+            )
+            for metric, entry in _named_mappings(rules, "primary_signals")
+        ),
+        guardrails=tuple(
+            GateGuardrailRule(
+                metric=metric,
+                statistic=_required_str(entry, "statistic"),
+                difference=_required_str(entry, "difference"),
+                serious_degradation=_required_positive_float(
+                    entry, "serious_degradation"
+                ),
+                interval_level=_optional_probability(entry, "interval_level"),
+            )
+            for metric, entry in _named_mappings(rules, "guardrails")
+        ),
+        failed_seeds=GateFailedSeedPolicy(
+            infrastructure_failure=_required_str(
+                failed_seeds, "infrastructure_failure"
+            ),
+            training_failure=_required_str(failed_seeds, "training_failure"),
+            replacement=_required_str(failed_seeds, "replacement"),
+        ),
+        outcome_precedence=_required_str_sequence(rules, "outcome_precedence"),
+    )
+
+
+def _validate_further_investment_gate(gate: MeritProbeDecisionGate) -> None:
+    if gate.primary_distributional_signals != _PRIMARY_SIGNALS:
+        raise EvidenceContractError(
+            "Further-Investment Gate must use NLL and CRPS as its primary "
+            "distributional signals."
+        )
+    if gate.guardrail_metrics != tuple(_GUARDRAIL_STATISTICS):
+        raise EvidenceContractError(
+            "Further-Investment Gate must guard coverage, PIT, MAE, and RMSE."
+        )
+
+    rules = gate.rules
+    if (
+        rules.evaluation_partition != "test"
+        or rules.paired_difference != "candidate_minus_reference"
+    ):
+        raise EvidenceContractError(
+            "Further-Investment Gate rules must be stated over test-partition "
+            "paired differences, candidate minus reference."
+        )
+    _validate_gate_seeds(rules)
+    _validate_primary_signal_rules(rules.primary_signals)
+    _validate_guardrail_rules(rules.guardrails)
+
+    if rules.failed_seeds != _FAILED_SEED_POLICY:
+        raise EvidenceContractError(
+            "A failed gate seed may be rerun only with the identical seed and "
+            "recipe after an infrastructure failure; a training failure is "
+            "recorded without rerun, and a failed seed is never replaced."
+        )
+    if rules.outcome_precedence != _OUTCOME_PRECEDENCE:
+        raise EvidenceContractError(
+            "Further-Investment Gate outcome precedence must be: "
+            + ", ".join(_OUTCOME_PRECEDENCE)
+            + "."
+        )
+
+
+def _validate_gate_seeds(rules: FurtherInvestmentGateRules) -> None:
+    seeds = rules.gate_seeds
+    if len(set(seeds)) != len(seeds) or any(seed < 0 for seed in seeds):
+        raise EvidenceContractError(
+            "Gate seeds must be distinct non-negative integers."
+        )
+    if rules.qualification_run.seed in seeds:
+        raise EvidenceContractError(
+            "The Qualification Seed must not be part of the Gate Seed Set."
+        )
+    if not set(rules.qualification_run.evaluated_partitions) <= set(
+        _QUALIFICATION_PARTITIONS
+    ):
+        raise EvidenceContractError(
+            "The qualifying run must keep the Sealed Test Partition: it may "
+            "evaluate only the train and validation partitions."
+        )
+    if not 1 <= rules.minimum_completed_seeds <= len(seeds):
+        raise EvidenceContractError(
+            "minimum_completed_seeds must be between 1 and the number of gate "
+            "seeds."
+        )
+    if not 0 <= rules.maximum_dissenting_seeds < rules.minimum_completed_seeds:
+        raise EvidenceContractError(
+            "maximum_dissenting_seeds must be non-negative and smaller than "
+            "minimum_completed_seeds."
+        )
+
+
+def _validate_primary_signal_rules(
+    signals: tuple[GatePrimarySignalRule, ...],
+) -> None:
+    if tuple(signal.metric for signal in signals) != _PRIMARY_SIGNALS:
+        raise EvidenceContractError(
+            "Primary signal rules must cover exactly NLL and CRPS, in that order."
+        )
+    for signal in signals:
+        if signal.difference not in _DIFFERENCE_FORMS:
+            raise EvidenceContractError(
+                f"Primary signal {signal.metric} must use an absolute or "
+                "relative difference."
+            )
+        if signal.metric == "nll" and signal.difference != "absolute":
+            raise EvidenceContractError(
+                "NLL differences must be absolute: a relative NLL change has no "
+                "stable meaning."
+            )
+        if signal.meaningful_improvement >= signal.clear_improvement:
+            raise EvidenceContractError(
+                f"meaningful_improvement must be smaller than clear_improvement "
+                f"for {signal.metric}."
+            )
+
+
+def _validate_guardrail_rules(guardrails: tuple[GateGuardrailRule, ...]) -> None:
+    if tuple(guardrail.metric for guardrail in guardrails) != tuple(
+        _GUARDRAIL_STATISTICS
+    ):
+        raise EvidenceContractError(
+            "Guardrail rules must cover exactly coverage, PIT, MAE, and RMSE, in "
+            "that order."
+        )
+    for guardrail in guardrails:
+        expected_statistic = _GUARDRAIL_STATISTICS[guardrail.metric]
+        if guardrail.statistic != expected_statistic:
+            raise EvidenceContractError(
+                f"The {guardrail.metric} guardrail must use the "
+                f"{expected_statistic} statistic."
+            )
+        if guardrail.difference not in _DIFFERENCE_FORMS:
+            raise EvidenceContractError(
+                f"The {guardrail.metric} guardrail must use an absolute or "
+                "relative difference."
+            )
+        if (guardrail.metric == "coverage") != (guardrail.interval_level is not None):
+            raise EvidenceContractError(
+                "Only the coverage guardrail declares an interval_level, and it "
+                "must declare one."
+            )
+
+
+def _named_mappings(
+    mapping: dict[str, Any], key: str
+) -> tuple[tuple[str, dict[str, Any]], ...]:
+    value = _required_mapping(mapping, key)
+    if not value or not all(
+        isinstance(name, str) and isinstance(entry, dict)
+        for name, entry in value.items()
+    ):
+        raise EvidenceContractError(
+            f"Expected '{key}' to map metric names to rule mappings."
+        )
+    return tuple(value.items())
+
+
+def _required_int(mapping: dict[str, Any], key: str) -> int:
+    value = mapping.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise EvidenceContractError(f"Expected '{key}' to be an integer.")
+    return value
+
+
+def _required_int_sequence(mapping: dict[str, Any], key: str) -> tuple[int, ...]:
+    value = mapping.get(key)
+    if not isinstance(value, list) or not value or not all(
+        isinstance(entry, int) and not isinstance(entry, bool) for entry in value
+    ):
+        raise EvidenceContractError(
+            f"Expected '{key}' to be a non-empty list of integers."
+        )
+    return tuple(value)
+
+
+def _required_positive_float(mapping: dict[str, Any], key: str) -> float:
+    value = mapping.get(key)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise EvidenceContractError(f"Expected '{key}' to be a positive number.")
+    return float(value)
+
+
+def _optional_probability(mapping: dict[str, Any], key: str) -> float | None:
+    if key not in mapping:
+        return None
+    value = mapping[key]
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0.0 < value < 1.0
+    ):
+        raise EvidenceContractError(f"Expected '{key}' to lie strictly in (0, 1).")
+    return float(value)
 
 
 def _required_mapping(mapping: dict[str, Any], key: str) -> dict[str, Any]:

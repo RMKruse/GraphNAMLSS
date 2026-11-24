@@ -75,13 +75,94 @@ def test_metr_la_merit_probe_labels_secondary_context_by_evidence_role():
     }
 
 
-def test_further_investment_gate_prefers_distributional_signals_with_guardrails():
+def test_further_investment_gate_names_primary_signals_and_guardrails():
     contract = _load_contract()
 
     gate = contract.further_investment_gate
 
-    assert gate.preferred_distributional_signals == ("nll", "crps")
+    assert gate.primary_distributional_signals == ("nll", "crps")
     assert gate.guardrail_metrics == ("coverage", "pit", "mae", "rmse")
+
+
+def test_gate_rules_are_stated_over_seed_paired_test_differences():
+    rules = _load_contract().further_investment_gate.rules
+
+    assert rules.evaluation_partition == "test"
+    assert rules.paired_difference == "candidate_minus_reference"
+
+
+def test_gate_rules_declare_the_gate_seed_set_and_its_completion_floor():
+    rules = _load_contract().further_investment_gate.rules
+
+    assert rules.gate_seeds == (1, 2, 3, 4, 5)
+    assert rules.minimum_completed_seeds == 4
+    assert rules.maximum_dissenting_seeds == 1
+
+
+def test_qualification_seed_sits_outside_the_gate_under_a_sealed_test_partition():
+    rules = _load_contract().further_investment_gate.rules
+
+    assert rules.qualification_run.seed == 0
+    assert rules.qualification_run.seed not in rules.gate_seeds
+    assert rules.qualification_run.evaluated_partitions == ("train", "validation")
+
+
+def test_gate_rules_declare_clear_and_meaningful_primary_improvements():
+    rules = _load_contract().further_investment_gate.rules
+
+    signals = {signal.metric: signal for signal in rules.primary_signals}
+
+    assert tuple(signals) == ("nll", "crps")
+    assert signals["nll"].difference == "absolute"
+    assert signals["nll"].clear_improvement == pytest.approx(0.02)
+    assert signals["nll"].meaningful_improvement == pytest.approx(0.01)
+    assert signals["crps"].difference == "relative"
+    assert signals["crps"].clear_improvement == pytest.approx(0.02)
+    assert signals["crps"].meaningful_improvement == pytest.approx(0.01)
+
+
+def test_gate_rules_declare_serious_guardrail_degradation_tolerances():
+    rules = _load_contract().further_investment_gate.rules
+
+    guardrails = {guardrail.metric: guardrail for guardrail in rules.guardrails}
+
+    assert tuple(guardrails) == ("coverage", "pit", "mae", "rmse")
+    assert guardrails["coverage"].statistic == "absolute_coverage_error"
+    assert guardrails["coverage"].interval_level == pytest.approx(0.9)
+    assert guardrails["coverage"].difference == "absolute"
+    assert guardrails["pit"].statistic == "ks_distance_from_uniform"
+    assert guardrails["pit"].difference == "absolute"
+    assert guardrails["mae"].difference == "relative"
+    assert guardrails["rmse"].difference == "relative"
+    for guardrail in guardrails.values():
+        assert guardrail.serious_degradation == pytest.approx(0.02)
+
+
+def test_gate_rules_declare_outcome_precedence():
+    rules = _load_contract().further_investment_gate.rules
+
+    assert rules.outcome_precedence == (
+        "inconclusive_when_too_few_completed_seeds",
+        "fail_when_no_meaningful_primary_improvement",
+        "pass_when_gate_met",
+        "inconclusive_otherwise",
+    )
+
+
+def test_gate_rules_never_replace_or_retry_a_diverged_seed():
+    rules = _load_contract().further_investment_gate.rules
+
+    assert rules.failed_seeds.infrastructure_failure == (
+        "rerun_identical_seed_and_recipe"
+    )
+    assert rules.failed_seeds.training_failure == "record_without_rerun"
+    assert rules.failed_seeds.replacement == "never"
+
+
+def test_gate_rules_point_to_their_decision_record():
+    rules = _load_contract().further_investment_gate.rules
+
+    assert Path(rules.decision_record).is_file()
 
 
 def test_failed_merit_probe_routes_to_diagnosis_before_expansion():
@@ -142,6 +223,124 @@ def test_loader_rejects_a_gate_without_the_required_metric_sets(tmp_path):
     invalid_path = _write_mutated_contract(tmp_path, "    - crps\n", "")
 
     with pytest.raises(EvidenceContractError, match="NLL and CRPS"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_gate_without_declared_rules(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path, "  declared_rules:\n", "  undeclared_rules:\n"
+    )
+
+    with pytest.raises(EvidenceContractError, match="declared_rules"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_qualification_seed_inside_the_gate_seed_set(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path, "gate_seeds: [1, 2, 3, 4, 5]", "gate_seeds: [0, 1, 2, 3, 4]"
+    )
+
+    with pytest.raises(EvidenceContractError, match="Qualification Seed"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_qualification_run_that_reads_the_test_partition(
+    tmp_path,
+):
+    invalid_path = _write_mutated_contract(
+        tmp_path,
+        "evaluated_partitions: [train, validation]",
+        "evaluated_partitions: [train, validation, test]",
+    )
+
+    with pytest.raises(EvidenceContractError, match="Sealed Test Partition"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_duplicate_gate_seeds(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path, "gate_seeds: [1, 2, 3, 4, 5]", "gate_seeds: [1, 2, 3, 4, 4]"
+    )
+
+    with pytest.raises(EvidenceContractError, match="distinct"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_completion_floor_above_the_gate_seed_count(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path, "minimum_completed_seeds: 4", "minimum_completed_seeds: 6"
+    )
+
+    with pytest.raises(EvidenceContractError, match="minimum_completed_seeds"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_dissent_allowance_that_swallows_the_completion_floor(
+    tmp_path,
+):
+    invalid_path = _write_mutated_contract(
+        tmp_path, "maximum_dissenting_seeds: 1", "maximum_dissenting_seeds: 4"
+    )
+
+    with pytest.raises(EvidenceContractError, match="maximum_dissenting_seeds"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_meaningful_improvement_at_or_above_clear(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path,
+        "meaningful_improvement: 0.01",
+        "meaningful_improvement: 0.02",
+    )
+
+    with pytest.raises(EvidenceContractError, match="meaningful_improvement"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_relative_nll_difference(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path,
+        "nll:\n        difference: absolute",
+        "nll:\n        difference: relative",
+    )
+
+    with pytest.raises(EvidenceContractError, match="NLL"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_guardrail_without_a_declared_tolerance(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path,
+        "statistic: ks_distance_from_uniform\n"
+        "        difference: absolute\n"
+        "        serious_degradation: 0.02\n",
+        "statistic: ks_distance_from_uniform\n"
+        "        difference: absolute\n",
+    )
+
+    with pytest.raises(EvidenceContractError, match="serious_degradation"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_a_reordered_outcome_precedence(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path,
+        "      - fail_when_no_meaningful_primary_improvement\n"
+        "      - pass_when_gate_met\n",
+        "      - pass_when_gate_met\n"
+        "      - fail_when_no_meaningful_primary_improvement\n",
+    )
+
+    with pytest.raises(EvidenceContractError, match="outcome precedence"):
+        load_merit_probe_evidence_contract(invalid_path)
+
+
+def test_loader_rejects_replacing_a_failed_seed(tmp_path):
+    invalid_path = _write_mutated_contract(
+        tmp_path, "replacement: never", "replacement: next_unused_seed"
+    )
+
+    with pytest.raises(EvidenceContractError, match="failed gate seed"):
         load_merit_probe_evidence_contract(invalid_path)
 
 

@@ -185,11 +185,39 @@ The first real-data Merit Probe for GraphNAMLSS, using the METR-LA Traffic Netwo
 _Avoid_: requiring PEMS-BAY replication before deciding whether the first real benchmark is promising
 
 **Merit Probe Training Standard**:
-The training standard for real benchmark evidence: the METR-LA Merit Probe requires an optimizer-trained GraphNAMLSS path that matches the conceptual architecture. The deterministic Tracer-Bullet Fit remains a Concept Demonstrator simplification and cannot satisfy the Further-Investment Gate.
+The training standard for real benchmark evidence: every model whose metrics enter the METR-LA Merit Probe is optimizer-trained, starting with a GraphNAMLSS path that matches the conceptual architecture. The deterministic Tracer-Bullet Fit remains a Concept Demonstrator simplification and cannot satisfy the Further-Investment Gate.
 _Avoid_: basing the Further-Investment Gate on a simplified implementation whose relationship to the claimed model is unclear
 
+**Deterministic NAMLSS**:
+The NAMLSS fitted by the Tracer-Bullet Fit, with linear location shapes and a constant scale. It is a Concept Demonstrator model; in the Merit Probe it serves only as a training sanity floor, never as evidence.
+_Avoid_: NAMLSS reference, Merit Probe reference
+
+**Graph-Ablated GraphNAMLSS**:
+The Merit Probe reference model: Tracer-Bullet GraphNAMLSS trained by the identical recipe with the Additive Graph Contribution removed for every distributional parameter, so it differs from the candidate only by the graph stream.
+_Avoid_: deterministic NAMLSS, NAMLSS baseline, gates-off GraphNAMLSS
+
+**Seed-Paired Comparison**:
+A comparison in which each declared seed trains both arms from the same local-component initialization and data order, so per-seed differences isolate the factor under test.
+_Avoid_: comparing the best seed of one arm with the best seed of another
+
+**Gate Seed Set**:
+The declared seeds whose Seed-Paired Comparisons the Further-Investment Gate evaluates, fixed before any real test comparison is seen.
+_Avoid_: adding, dropping or swapping seeds after results are visible
+
+**Qualification Seed**:
+The seed reserved for the qualifying run that freezes the Merit Probe run recipe. It is never part of the Gate Seed Set, because the recipe was shaped by inspecting it.
+_Avoid_: counting the qualifying run as gate evidence
+
+**Completed Gate Seed**:
+A gate seed on which both arms trained, selected a checkpoint by validation NLL, were evaluated, and produced their interpretability artifacts from the reloaded checkpoint. A seed that fails is reported, may be rerun with the identical seed and recipe only after an infrastructure failure, and is never replaced by another seed.
+_Avoid_: rerunning a diverged seed until it trains, or substituting a fresh seed for a failed one
+
+**Sealed Test Partition**:
+The rule that no real METR-LA test-partition metric is computed before the multi-seed Merit Probe evidence run; the qualifying run judges the recipe from training and validation evidence only.
+_Avoid_: freezing a run recipe after looking at a real test comparison
+
 **METR-LA Merit Probe Primary Comparison**:
-The first real-data comparison that matters for the research investment decision: deterministic NAMLSS versus Tracer-Bullet GraphNAMLSS on METR-LA.
+The first real-data comparison that matters for the research investment decision: a Seed-Paired Comparison of Graph-Ablated GraphNAMLSS versus optimizer-trained Tracer-Bullet GraphNAMLSS on METR-LA.
 _Avoid_: making the first go/no-go decision depend on the full baseline suite
 
 **METR-LA Merit Probe Secondary Context**:
@@ -197,8 +225,20 @@ The supporting baseline context for the first real-data Merit Probe: Distributio
 _Avoid_: treating the Point GNN Reference as a distributional peer
 
 **Further-Investment Gate**:
-The first go/no-go standard for spending more research time on GraphNAMLSS: on the METR-LA Merit Probe, Tracer-Bullet GraphNAMLSS should show at least one clear distributional signal versus deterministic NAMLSS, preferably improved NLL or CRPS, without serious degradation in coverage, PIT, MAE, or RMSE, while preserving interpretable local shape and graph contribution artifacts.
+The first go/no-go standard for spending more research time on GraphNAMLSS: on the METR-LA Merit Probe, Tracer-Bullet GraphNAMLSS should show a Clear Distributional Signal in NLL or CRPS versus Graph-Ablated GraphNAMLSS, with the other primary signal not clearly worse, no Serious Guardrail Degradation, and interpretable local shape and graph contribution artifacts preserved. Its rules are declared before the run and evaluated over the Gate Seed Set.
 _Avoid_: requiring publication-grade dominance across every metric before deciding whether the idea deserves more work
+
+**Clear Distributional Signal**:
+An NLL or CRPS improvement of Tracer-Bullet GraphNAMLSS over Graph-Ablated GraphNAMLSS that is both large enough on the mean paired difference and consistent across the Gate Seed Set. Only NLL and CRPS can supply it; coverage and PIT are calibration guardrails, not skill signals.
+_Avoid_: passing the gate on a coverage or PIT improvement alone
+
+**Serious Guardrail Degradation**:
+A mean paired worsening, versus Graph-Ablated GraphNAMLSS, of interval-coverage error, PIT calibration distance, MAE or RMSE beyond the tolerance the evidence contract declares. Miscalibration shared equally by both arms is a diagnostic note, not a degradation.
+_Avoid_: judging guardrails against absolute targets or against secondary context models
+
+**Further-Investment Gate Outcome**:
+One of three classifications of the Merit Probe. **Pass**: the Further-Investment Gate is met. **Fail**: neither NLL nor CRPS shows a meaningful improvement, so the evidence points against graph value. **Inconclusive**: anything else, including a favourable but unclear signal, a Clear Distributional Signal blocked by Serious Guardrail Degradation, primary signals pointing in opposite directions, too few completed gate seeds, or missing interpretability artifacts.
+_Avoid_: forcing an ambiguous result into pass or fail
 
 **Merit Probe Failure Rule**:
 If the METR-LA Merit Probe does not pass the Further-Investment Gate, the project should pause architecture expansion and diagnose the data, baseline, fitting method, graph stream, scale predictor, and horizon choice before adding PEMS-BAY replication, the full Primary Experiment Matrix, Bayesian graph streams, or medical applications.
@@ -360,6 +400,10 @@ _Avoid_: risk score, disease rate unless the modeling target is explicitly a rat
 - **Graph-Feature Statistical Baseline** variants test whether learned graph representations improve over simple graph-derived covariates
 - The **Distributional GNN Baseline** tests whether GraphNAMLSS preserves interpretability without giving up too much predictive distribution quality
 - The **Point GNN Reference** checks point accuracy against common GNN practice but is not a peer distributional method
+- The **METR-LA Merit Probe Primary Comparison** pits **Tracer-Bullet GraphNAMLSS** against its **Graph-Ablated GraphNAMLSS** under a **Same-Recipe Comparison** and a **Seed-Paired Comparison**, so a gate signal can only come from the graph stream
+- The **Deterministic NAMLSS** belongs to the **Concept Demonstrator**; the Merit Probe uses it only as a training sanity floor
+- The **Further-Investment Gate** evaluates the **Gate Seed Set** only; the **Qualification Seed** freezes the run recipe under a **Sealed Test Partition** and never counts toward the gate
+- The **Further-Investment Gate** yields one **Further-Investment Gate Outcome**; secondary context informs the human decision but has no gate rule
 - The **Tracer-Bullet Slice** precedes the full **Primary Experiment Matrix**
 - The **Tracer-Bullet Slice** uses **Tracer-Bullet GraphNAMLSS** as its first GraphNAMLSS variant
 - The **Tracer-Bullet GraphNAMLSS** uses the **Tracer-Bullet Graph Encoder** before attention-based graph encoders
@@ -550,6 +594,11 @@ _Avoid_: risk score, disease rate unless the modeling target is explicitly a rat
 - "statistical baseline" could mean with or without graph-derived covariates — resolved: include plain and **Graph-Feature Statistical Baseline** variants.
 - "GNN baseline" could mean point prediction or distributional prediction — resolved: use a **Distributional GNN Baseline** for the main neural graph comparison.
 - "point GNN" could be mistaken for a distributional competitor — resolved: treat it as a **Point GNN Reference**.
+- "NAMLSS reference" could mean the closed-form **Deterministic NAMLSS** or a model matched to the candidate except for its graph stream — resolved: the Merit Probe reference is **Graph-Ablated GraphNAMLSS**.
+- "clear distributional signal, preferably NLL or CRPS" left room for a pass on coverage or PIT alone — resolved: only NLL or CRPS can supply a **Clear Distributional Signal**.
+- "fail" and "inconclusive" were both used for any non-pass — resolved: see **Further-Investment Gate Outcome**.
+- "qualifying run" could mean one of the gate seeds or a separate recipe-freezing run — resolved: it uses the **Qualification Seed** under a **Sealed Test Partition**.
+- "guardrail" could mean a gate rule against any model — resolved: gate guardrails are coverage, PIT, MAE and RMSE judged against **Graph-Ablated GraphNAMLSS** (**Serious Guardrail Degradation**); the **Point GNN Reference**'s point-accuracy guardrail role is context for the human decision and has no gate rule.
 - "first implementation" could mean the full primary matrix or a minimal end-to-end experiment — resolved: begin with a **Tracer-Bullet Slice**.
 - "first GraphNAMLSS model" could refer to any primary matrix cell — resolved: use **Tracer-Bullet GraphNAMLSS**.
 - "first graph encoder" could be GraphSAGE or GAT — resolved: use the **Tracer-Bullet Graph Encoder** first.

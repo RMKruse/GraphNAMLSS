@@ -13,7 +13,7 @@ training_standard:
   merit_probe_fit: optimizer_trained_graph_namlss
   next_implementation_path: optimizer_trained_graph_namlss_training
 further_investment_gate:
-  preferred_distributional_signals:
+  primary_distributional_signals:
     - nll
     - crps
   guardrail_metrics:
@@ -21,6 +21,56 @@ further_investment_gate:
     - pit
     - mae
     - rmse
+  # Declared before any real METR-LA comparison is seen; see the decision record.
+  # Every threshold is a positive magnitude on the mean per-seed paired difference
+  # (candidate minus reference): an improvement is a difference at or below
+  # -threshold, a degradation a difference above +tolerance.
+  declared_rules:
+    decision_record: docs/adr/0006-declare-further-investment-gate-rules-before-the-merit-probe.md
+    evaluation_partition: test
+    paired_difference: candidate_minus_reference
+    gate_seeds: [1, 2, 3, 4, 5]
+    qualification_run:
+      seed: 0
+      evaluated_partitions: [train, validation]
+    minimum_completed_seeds: 4
+    maximum_dissenting_seeds: 1
+    primary_signals:
+      nll:
+        difference: absolute
+        clear_improvement: 0.02
+        meaningful_improvement: 0.01
+      crps:
+        difference: relative
+        clear_improvement: 0.02
+        meaningful_improvement: 0.01
+    guardrails:
+      coverage:
+        statistic: absolute_coverage_error
+        interval_level: 0.9
+        difference: absolute
+        serious_degradation: 0.02
+      pit:
+        statistic: ks_distance_from_uniform
+        difference: absolute
+        serious_degradation: 0.02
+      mae:
+        statistic: mae
+        difference: relative
+        serious_degradation: 0.02
+      rmse:
+        statistic: rmse
+        difference: relative
+        serious_degradation: 0.02
+    failed_seeds:
+      infrastructure_failure: rerun_identical_seed_and_recipe
+      training_failure: record_without_rerun
+      replacement: never
+    outcome_precedence:
+      - inconclusive_when_too_few_completed_seeds
+      - fail_when_no_meaningful_primary_improvement
+      - pass_when_gate_met
+      - inconclusive_otherwise
 failure_rule:
   next_step: diagnose
   diagnostic_areas:

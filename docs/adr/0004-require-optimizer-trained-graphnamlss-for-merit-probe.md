@@ -12,6 +12,6 @@ The current deterministic Tracer-Bullet Fit combines deterministic local fitting
 
 ## Consequences and limits
 
-The Concept Demonstrator remains unblocked and must continue to disclose its deterministic Tracer-Bullet Fit. The deterministic NAMLSS reference may retain deterministic fitting because that is its intended baseline model; this decision concerns the GraphNAMLSS candidate used as Merit Probe evidence. A METR-LA run produced by the demo fit cannot pass or fail the Further-Investment Gate.
+The Concept Demonstrator remains unblocked and must continue to disclose its deterministic Tracer-Bullet Fit. The deterministic NAMLSS reference may retain deterministic fitting because that is its intended baseline model; this decision concerns the GraphNAMLSS candidate used as Merit Probe evidence. *(Superseded by [ADR 0005](0005-use-graph-ablated-graphnamlss-as-merit-probe-reference.md): the Merit Probe reference is now Graph-Ablated GraphNAMLSS, trained by the candidate's recipe. Deterministic NAMLSS is used only as a training sanity floor.)* A METR-LA run produced by the demo fit cannot pass or fail the Further-Investment Gate.
 
 This decision does not require PEMS-BAY replication, the full Primary Experiment Matrix, Bayesian graph streams, structural uncertainty, or medical applications. It does not select a specific optimizer, stopping rule, or hyperparameter budget; those belong to the follow-up implementation contract. It also makes no claim that optimizer-trained GraphNAMLSS will pass the Merit Probe.
