@@ -107,6 +107,25 @@ python -m jupyter nbconvert --execute --to notebook --inplace \
   notebooks/01_graphnamlss_concept_walkthrough.ipynb
 ```
 
+## Concept Demo Robustness Probe
+
+The Concept Demo Robustness Probe reruns the Concept Demo Bundle over a declared
+set of ten Demo Fixture seeds (20250214 through 20250223). For each seed it
+checks whether the Localized Congestion Spillover Demo Scenario reads the same
+way. Downstream targets should be slower and more variable during spillover.
+The gated `mu` graph contribution should be more negative and the gated `sigma`
+graph contribution more positive than in routine traffic.
+
+```bash
+graphnamlss demo-robustness --output outputs/concept-demo-robustness
+```
+
+Each seed's bundle is written to `seeds/seed-<n>/`, and the single summary is
+`concept_demo_robustness_summary.json`. Failed seeds and checks that do not hold
+are kept in the summary, never dropped. Multi-seed synthetic robustness is a
+teaching sanity check: it is not METR-LA Merit Probe evidence and cannot
+support the Further-Investment Gate.
+
 ## Simple Experiment Config Dry Run
 
 The first tracer-bullet experiment contract is a YAML-backed Simple Experiment Config. The sample config validates the METR-LA tracer setup without downloading METR-LA or starting training:

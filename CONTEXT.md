@@ -176,6 +176,10 @@ _Avoid_: judging concept clarity from a fixture whose purpose is only pipeline c
 The rule that Concept Demo Bundle metrics are sanity checks for a runnable and inspectable experiment contract, not evidence that GraphNAMLSS outperforms baselines or improves calibration.
 _Avoid_: interpreting synthetic demo metrics as support for the Distributional Calibration Claim or Parameter-Specific Graph Effect
 
+**Concept Demo Robustness Probe**:
+A rerun of the Concept Demo Bundle over a declared set of Demo Fixture seeds that records, seed by seed, whether the Localized Congestion Spillover Demo Scenario's target contrasts and gated `mu` and `sigma` graph contributions point the expected way. It is a teaching sanity check inside the Concept Demo Evidence Boundary.
+_Avoid_: robustness evidence, multi-seed Merit Probe, calling its seeds a Gate Seed Set
+
 **Merit Probe**:
 A project phase where real benchmark evidence is strong enough to decide whether GraphNAMLSS deserves further research investment.
 _Avoid_: using synthetic fixture results or runnable scaffolding as the Merit Probe
@@ -402,6 +406,7 @@ _Avoid_: risk score, disease rate unless the modeling target is explicitly a rat
 - The **Point GNN Reference** checks point accuracy against common GNN practice but is not a peer distributional method
 - The **METR-LA Merit Probe Primary Comparison** pits **Tracer-Bullet GraphNAMLSS** against its **Graph-Ablated GraphNAMLSS** under a **Same-Recipe Comparison** and a **Seed-Paired Comparison**, so a gate signal can only come from the graph stream
 - The **Deterministic NAMLSS** belongs to the **Concept Demonstrator**; the Merit Probe uses it only as a training sanity floor
+- The **Concept Demo Robustness Probe** stays inside the **Concept Demo Evidence Boundary**: its Demo Fixture seeds are never a **Gate Seed Set**, and it cannot support the **Further-Investment Gate**
 - The **Further-Investment Gate** evaluates the **Gate Seed Set** only; the **Qualification Seed** freezes the run recipe under a **Sealed Test Partition** and never counts toward the gate
 - The **Further-Investment Gate** yields one **Further-Investment Gate Outcome**; secondary context informs the human decision but has no gate rule
 - The **Tracer-Bullet Slice** precedes the full **Primary Experiment Matrix**
@@ -597,6 +602,7 @@ _Avoid_: risk score, disease rate unless the modeling target is explicitly a rat
 - "NAMLSS reference" could mean the closed-form **Deterministic NAMLSS** or a model matched to the candidate except for its graph stream — resolved: the Merit Probe reference is **Graph-Ablated GraphNAMLSS**.
 - "clear distributional signal, preferably NLL or CRPS" left room for a pass on coverage or PIT alone — resolved: only NLL or CRPS can supply a **Clear Distributional Signal**.
 - "fail" and "inconclusive" were both used for any non-pass — resolved: see **Further-Investment Gate Outcome**.
+- "robustness" could mean a multi-seed rerun of the synthetic demo or a real-data check such as reconstructing the traffic graph — resolved: the multi-seed synthetic rerun is the **Concept Demo Robustness Probe**, a teaching sanity check; real-data robustness checks keep their own names.
 - "qualifying run" could mean one of the gate seeds or a separate recipe-freezing run — resolved: it uses the **Qualification Seed** under a **Sealed Test Partition**.
 - "guardrail" could mean a gate rule against any model — resolved: gate guardrails are coverage, PIT, MAE and RMSE judged against **Graph-Ablated GraphNAMLSS** (**Serious Guardrail Degradation**); the **Point GNN Reference**'s point-accuracy guardrail role is context for the human decision and has no gate rule.
 - "first implementation" could mean the full primary matrix or a minimal end-to-end experiment — resolved: begin with a **Tracer-Bullet Slice**.

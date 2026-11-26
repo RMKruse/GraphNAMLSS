@@ -12,6 +12,7 @@ from graphnamlss.config import (
     validate_experiment_config,
 )
 from graphnamlss.demo import run_concept_demo_bundle
+from graphnamlss.demo_robustness import run_concept_demo_robustness_probe
 from graphnamlss.report import generate_tracer_bullet_evaluation_report
 from graphnamlss.training import train_namlss_on_traffic
 
@@ -57,6 +58,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Concept Demo Fixture seed.",
     )
 
+    demo_robustness_parser = subparsers.add_parser(
+        "demo-robustness",
+        help=(
+            "Run the Concept Demo Bundle over the declared seed set and summarize "
+            "the spillover teaching signal (a teaching sanity check only)."
+        ),
+    )
+    demo_robustness_parser.add_argument("--output", required=True)
+
     args = parser.parse_args(argv)
 
     if args.command == "dry-run":
@@ -73,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "demo":
         return _demo(Path(args.output), seed=args.seed)
+    if args.command == "demo-robustness":
+        return _demo_robustness(Path(args.output))
 
     parser.error(f"Unknown command: {args.command}")
     return 2
@@ -141,6 +153,17 @@ def _demo(output_directory: Path, *, seed: int) -> int:
         summary = run_concept_demo_bundle(output_directory, seed=seed)
     except (ConfigError, OSError, ValueError) as exc:
         print(f"Demo error: {exc}", file=sys.stderr)
+        return 2
+
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0
+
+
+def _demo_robustness(output_directory: Path) -> int:
+    try:
+        summary = run_concept_demo_robustness_probe(output_directory)
+    except (OSError, ValueError) as exc:
+        print(f"Demo robustness error: {exc}", file=sys.stderr)
         return 2
 
     print(json.dumps(summary, indent=2, sort_keys=True))
