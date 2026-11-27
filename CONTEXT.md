@@ -36,6 +36,10 @@ _Avoid_: graph weight when referring to the scalar gate rather than graph edge w
 The interpretation of Graph Contribution Gate values as visible diagnostics of parameter-specific graph reliance in a fitted model or demo, not as causal attributions or standalone proof of empirical merit.
 _Avoid_: treating gate magnitude alone as evidence that graph information improves a distributional parameter
 
+**Scale Absorption**:
+A fitted location-scale model explaining a location shift that its location path misses as increased scale instead.
+_Avoid_: reading a `sigma` graph contrast as pure heteroskedasticity; Location-Shift Absorption
+
 **Centered Graph Contribution**:
 An additive graph contribution centered per distributional parameter so it does not absorb the predictor intercept.
 _Avoid_: raw graph contribution
@@ -153,12 +157,12 @@ The reading order for the Concept Demo Bundle report: model decomposition first,
 _Avoid_: leading the Concept Demonstrator with benchmark tables before readers understand the modeling idea
 
 **Localized Congestion Spillover Demo Scenario**:
-The synthetic Concept Demo Bundle scenario where ordinary traffic behavior is mostly explained by local lags, while graph-neighbor congestion adds an interpretable distributional effect: expected slowdown through the location parameter and increased uncertainty through the scale parameter.
-_Avoid_: using a generic synthetic fixture that runs the pipeline but does not make the parameter-specific graph contribution understandable
+The synthetic Concept Demo Bundle scenario where local lags explain ordinary traffic behavior, while upstream congestion makes the downstream target both slower and more variable. How a fitted model splits that effect between its `mu` and `sigma` graph paths is a Graph Gate Diagnostic, not part of the scenario.
+_Avoid_: promising that the fitted demo shows the slowdown through the location parameter; using a generic synthetic fixture that runs the pipeline but does not make the parameter-specific graph contribution understandable
 
 **Heteroskedastic Spillover Uncertainty**:
-The Demo Fixture behavior where downstream target variability increases during graph-neighbor congestion spillover windows, giving the scale parameter a synthetic signal that is distinct from the location slowdown.
-_Avoid_: demonstrating the scale head only as a mechanically positive parameter without a scenario-level uncertainty signal
+The Demo Fixture behavior where downstream target variability increases during graph-neighbor congestion spillover windows, giving the data a scale signal that is distinct from the location slowdown. A fitted `sigma` graph contrast can mix this signal with Scale Absorption of the slowdown.
+_Avoid_: demonstrating the scale head only as a mechanically positive parameter without a scenario-level uncertainty signal; reading a fitted `sigma` contrast as this signal alone
 
 **Demo Fixture**:
 A synthetic traffic fixture built for the Concept Demo Bundle narrative rather than for broad contract testing, with a clear Localized Congestion Spillover Demo Scenario.
@@ -407,6 +411,7 @@ _Avoid_: risk score, disease rate unless the modeling target is explicitly a rat
 - The **METR-LA Merit Probe Primary Comparison** pits **Tracer-Bullet GraphNAMLSS** against its **Graph-Ablated GraphNAMLSS** under a **Same-Recipe Comparison** and a **Seed-Paired Comparison**, so a gate signal can only come from the graph stream
 - The **Deterministic NAMLSS** belongs to the **Concept Demonstrator**; the Merit Probe uses it only as a training sanity floor
 - The **Concept Demo Robustness Probe** stays inside the **Concept Demo Evidence Boundary**: its Demo Fixture seeds are never a **Gate Seed Set**, and it cannot support the **Further-Investment Gate**
+- A **Graph Gate Diagnostic** of the `sigma` path can include **Scale Absorption**, so neither graph path alone shows how a fitted model splits a graph effect between location and scale
 - The **Further-Investment Gate** evaluates the **Gate Seed Set** only; the **Qualification Seed** freezes the run recipe under a **Sealed Test Partition** and never counts toward the gate
 - The **Further-Investment Gate** yields one **Further-Investment Gate Outcome**; secondary context informs the human decision but has no gate rule
 - The **Tracer-Bullet Slice** precedes the full **Primary Experiment Matrix**
@@ -603,6 +608,7 @@ _Avoid_: risk score, disease rate unless the modeling target is explicitly a rat
 - "clear distributional signal, preferably NLL or CRPS" left room for a pass on coverage or PIT alone — resolved: only NLL or CRPS can supply a **Clear Distributional Signal**.
 - "fail" and "inconclusive" were both used for any non-pass — resolved: see **Further-Investment Gate Outcome**.
 - "robustness" could mean a multi-seed rerun of the synthetic demo or a real-data check such as reconstructing the traffic graph — resolved: the multi-seed synthetic rerun is the **Concept Demo Robustness Probe**, a teaching sanity check; real-data robustness checks keep their own names.
+- "slowdown through the location parameter" could describe the Demo Fixture's data or the fitted demo — resolved: the **Localized Congestion Spillover Demo Scenario** describes the data; how a fitted model splits it between `mu` and `sigma` is a **Graph Gate Diagnostic**, and a `sigma` contrast may include **Scale Absorption**.
 - "qualifying run" could mean one of the gate seeds or a separate recipe-freezing run — resolved: it uses the **Qualification Seed** under a **Sealed Test Partition**.
 - "guardrail" could mean a gate rule against any model — resolved: gate guardrails are coverage, PIT, MAE and RMSE judged against **Graph-Ablated GraphNAMLSS** (**Serious Guardrail Degradation**); the **Point GNN Reference**'s point-accuracy guardrail role is context for the human decision and has no gate rule.
 - "first implementation" could mean the full primary matrix or a minimal end-to-end experiment — resolved: begin with a **Tracer-Bullet Slice**.
