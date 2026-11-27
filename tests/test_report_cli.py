@@ -141,8 +141,13 @@ def test_report_command_generates_tracer_bullet_evaluation_bundle(tmp_path):
     assert section_positions == sorted(section_positions)
     assert "local lags explain routine traffic behavior" in report
     assert "upstream congestion propagates through the graph" in report
-    assert "expected slowdown through the location parameter" in report
-    assert "increased uncertainty through the scale parameter" in report
+    assert "makes the downstream target both slower and more variable" in report
+    assert "Neighbor lag features expose the spillover" in report
+    assert (
+        "How a fitted model splits it between its `mu` and `sigma` graph paths is "
+        "a Graph Gate Diagnostic, not part of the scenario." in report
+    )
+    assert "### Spillover Contrasts" not in report
     assert "parameter-specific graph reliance diagnostic" in report
     assert "not causal proof" in report
     assert "not standalone evidence" in report

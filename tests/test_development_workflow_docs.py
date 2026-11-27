@@ -66,6 +66,37 @@ def test_readme_keeps_unimplemented_tracks_outside_the_concept_demonstrator():
     assert "not completed Concept Demo Bundle requirements" in readme
 
 
+def test_readme_guided_demo_path_discloses_the_weak_mu_path_and_scale_absorption():
+    guided_demo_path = _section(Path("README.md").read_text(), "## Guided Demo Path")
+
+    assert "`mu` graph path is weak and seed-dependent" in guided_demo_path
+    assert "Tracer-Bullet Fit" in guided_demo_path
+    assert "Scale Absorption" in guided_demo_path
+    assert "`graphnamlss demo-robustness`" in guided_demo_path
+
+
+def test_readme_robustness_probe_reports_the_gated_mu_share_without_enforcing_it():
+    probe = _section(Path("README.md").read_text(), "## Concept Demo Robustness Probe")
+
+    assert "`gated_mu_share_of_slowdown`" in probe
+    assert "reported, not enforced" in probe
+
+
+def test_review_guide_asks_why_the_sigma_spillover_contrast_is_not_pure_heteroskedasticity():
+    guide = " ".join(Path("docs/concept-demonstrator-review.md").read_text().split())
+
+    assert "Why is the `sigma` spillover contrast not pure heteroskedasticity?" in guide
+    assert "can explain all five points" in guide
+    assert "Scale Absorption teach-back: pending" in guide
+    assert_concept_demo_scope(guide)
+
+
+def _section(markdown, heading):
+    start = markdown.index(heading)
+    end = markdown.find("\n## ", start + len(heading))
+    return " ".join(markdown[start : end if end >= 0 else None].split())
+
+
 def test_readme_documents_plain_pyproject_and_pyg_workflow():
     readme = Path("README.md").read_text()
 

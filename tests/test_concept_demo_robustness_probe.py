@@ -108,6 +108,41 @@ def test_every_directional_check_reports_every_declared_seed_without_dropping_fa
     )
 
 
+def test_gated_mu_share_of_slowdown_is_reported_per_seed_but_not_enforced(
+    declared_probe,
+):
+    output_directory, emitted = declared_probe
+
+    shares = []
+    for record in emitted["per_seed"]:
+        checks = record["checks"]
+        share = record["gated_mu_share_of_slowdown"]
+        graph_summary = json.loads(
+            (
+                output_directory
+                / record["bundle_directory"]
+                / "runs"
+                / "tracer-bullet-graph-namlss"
+                / "train_summary.json"
+            ).read_text()
+        )
+        target_scale = graph_summary["scaling"]["target"]["scale"]
+        standardized_slowdown = checks["target_location"]["difference"] / target_scale
+
+        assert share * standardized_slowdown == pytest.approx(
+            checks["gated_mu_contribution"]["difference"], abs=1e-5
+        )
+        assert (share > 0.0) is checks["gated_mu_contribution"]["held"]
+        shares.append(share)
+
+    assert emitted["aggregate"]["gated_mu_share_of_slowdown"] == {
+        "min": min(shares),
+        "max": max(shares),
+    }
+    assert "gated_mu_share_of_slowdown" in emitted["comparison"]
+    assert "reported, not enforced" in emitted["comparison"]
+
+
 def test_robustness_summary_states_it_is_a_teaching_sanity_check_outside_the_gate(
     declared_probe,
 ):
@@ -158,6 +193,11 @@ def test_a_seed_whose_bundle_cannot_be_written_is_recorded_as_a_visible_failure(
     assert failed["bundle_directory"] == "seeds/seed-11"
     assert failed["error"]
     assert "checks" not in failed
+    assert "gated_mu_share_of_slowdown" not in failed
+    assert summary["aggregate"]["gated_mu_share_of_slowdown"] == {
+        "min": completed["gated_mu_share_of_slowdown"],
+        "max": completed["gated_mu_share_of_slowdown"],
+    }
 
     for check in summary["aggregate"]["checks"].values():
         assert check["not_evaluated_on"] == [11]

@@ -19,10 +19,11 @@ artifacts. Then explain, without copying the report:
 
 1. What the local additive predictor contributes.
 2. How graph information contributes separately to `mu` and `sigma`.
-3. What a Graph Contribution Gate does and does not establish.
-4. What conclusions are permitted by the Concept Demo Evidence Boundary.
+3. Why is the `sigma` spillover contrast not pure heteroskedasticity?
+4. What a Graph Contribution Gate does and does not establish.
+5. What conclusions are permitted by the Concept Demo Evidence Boundary.
 
-The review passes when the reader can explain all four points, can distinguish
+The review passes when the reader can explain all five points, can distinguish
 the `mu` and `sigma` paths, and does not treat synthetic metrics or the
 deterministic Tracer-Bullet Fit as Merit Probe evidence.
 
@@ -37,6 +38,7 @@ graph gates, metrics, predictions, and resolved configurations.
 - Reviewer and date: pending
 - Local predictor teach-back: pending
 - `mu`/`sigma` graph-path teach-back: pending
+- Scale Absorption teach-back: pending
 - Graph Contribution Gate interpretation: pending
 - Concept Demo Evidence Boundary teach-back: pending
 - Concrete observations: pending

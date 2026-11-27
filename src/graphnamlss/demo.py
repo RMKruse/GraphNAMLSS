@@ -19,6 +19,7 @@ from graphnamlss.config import (
     validate_experiment_config,
 )
 from graphnamlss.report import generate_tracer_bullet_evaluation_report
+from graphnamlss.testing import load_localized_congestion_spillover_demo_fixture
 from graphnamlss.training import train_namlss_on_traffic
 
 
@@ -58,6 +59,9 @@ def run_concept_demo_bundle(
         distributional_gnn_run=run_directories["distributional_gnn_baseline"],
         point_gnn_run=run_directories["point_gnn_reference"],
         output_directory=output_directory / "report",
+        spillover_scenario=load_localized_congestion_spillover_demo_fixture(
+            seed=seed
+        ).scenario,
     )
     return {
         "bundle_directory": str(output_directory),

@@ -48,7 +48,10 @@ Read that report in this order:
    `report/assets/graph_contribution_mu.svg` and
    `report/assets/graph_contribution_sigma.svg`, then use
    `runs/tracer-bullet-graph-namlss/graph_contributions.json` for the underlying
-   values.
+   values. Its Spillover Contrasts table shows this run's spillover-minus-routine
+   contrasts: under the Tracer-Bullet Fit the `mu` graph path is weak and
+   seed-dependent, the `sigma` contrast may include Scale Absorption, and
+   `graphnamlss demo-robustness` shows the spread across seeds.
 4. **Graph Gate Diagnostics** — inspect
    `runs/tracer-bullet-graph-namlss/graph_gates.json` to see the
    parameter-specific graph reliance diagnostic. In the deterministic
@@ -112,9 +115,13 @@ python -m jupyter nbconvert --execute --to notebook --inplace \
 The Concept Demo Robustness Probe reruns the Concept Demo Bundle over a declared
 set of ten Demo Fixture seeds (20250214 through 20250223). For each seed it
 checks whether the Localized Congestion Spillover Demo Scenario reads the same
-way. Downstream targets should be slower and more variable during spillover.
-The gated `mu` graph contribution should be more negative and the gated `sigma`
-graph contribution more positive than in routine traffic.
+way. Downstream targets should be slower and more variable during spillover,
+and the gated `sigma` graph contribution more positive than in routine traffic.
+The probe also records whether the gated `mu` graph contribution is more
+negative, and `gated_mu_share_of_slowdown`: the share of the standardized
+slowdown that the gated `mu` contrast carries, per seed and as a minimum and
+maximum across seeds. Both are reported, not enforced, because the `mu` graph
+path is weak and seed-dependent under the Tracer-Bullet Fit.
 
 ```bash
 graphnamlss demo-robustness --output outputs/concept-demo-robustness

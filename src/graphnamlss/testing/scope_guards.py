@@ -28,6 +28,27 @@ _PROHIBITED_CLAIMS = (
         r"\b(?:gamlss|bamlss)\b",
         re.IGNORECASE,
     ),
+    # The fitted graph `mu` path is weak and seed-dependent under the
+    # Tracer-Bullet Fit, so no wording may claim it reliably shows the spillover
+    # slowdown. A negation between the path and the adverb is honest disclosure.
+    re.compile(
+        r"\b(?:graph\s+`?mu`?|gated\s+`?mu`?(?:\s+graph)?|`?mu`?\s+graph)\s+"
+        r"(?:path|contribution|contrast|head|signal)s?\b"
+        r"(?:(?!\b(?:not|never|cannot)\b|n't\b).){0,80}?"
+        r"\b(?:reliabl[ey]|consistently|always|robustly|"
+        r"on (?:every|all|each) (?:declared )?(?:demo fixture )?seeds?)\b"
+        r".{0,80}?\bslow(?:down|er)\b",
+        re.IGNORECASE,
+    ),
+    # The Localized Congestion Spillover Demo Scenario describes the data; how a
+    # fitted model splits the slowdown between `mu` and `sigma` is a Graph Gate
+    # Diagnostic, so no wording may promise it through the location parameter.
+    re.compile(
+        r"(?<!not )(?<!n't )(?<!never )"
+        r"\b(?:shows?|exposes?|captures?|reveals?|carry|carries)\b.{0,80}?"
+        r"\bslowdown through the location parameter\b",
+        re.IGNORECASE,
+    ),
 )
 
 

@@ -6,6 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from graphnamlss.spillover_contrasts import measure_spillover_contrasts
+from graphnamlss.testing import LocalizedCongestionSpilloverScenario
+
 
 MODEL_ORDER = (
     "deterministic_namlss",
@@ -14,6 +17,23 @@ MODEL_ORDER = (
     "point_gnn_reference",
 )
 SPLIT_ORDER = ("train", "validation", "test")
+SPILLOVER_CONTRAST_LABELS = {
+    "target_location": "Target speed mean",
+    "target_variability": "Target speed standard deviation",
+    "gated_mu_contribution": "Gated `mu` graph contribution",
+    "gated_sigma_contribution": "Gated `sigma` graph contribution",
+}
+SPILLOVER_DISCLOSURE = (
+    "Under the Tracer-Bullet Fit, the `mu` graph path is weak and seed-dependent: "
+    "in the Localized Congestion Spillover Demo Scenario the gated `mu` contrast "
+    "carries little of the slowdown, and on some Demo Fixture seeds it points the "
+    "other way. The `sigma` contrast may include Scale Absorption: the fit can "
+    "explain the part of the slowdown its location path misses as increased "
+    "scale, so the `sigma` contrast is not pure Heteroskedastic Spillover "
+    "Uncertainty. How the fit splits the spillover between `mu` and `sigma` is a "
+    "Graph Gate Diagnostic. Run `graphnamlss demo-robustness` to see the spread "
+    "of these contrasts across the declared Demo Fixture seeds."
+)
 
 
 def generate_tracer_bullet_evaluation_report(
@@ -23,6 +43,7 @@ def generate_tracer_bullet_evaluation_report(
     distributional_gnn_run: Path,
     point_gnn_run: Path,
     output_directory: Path,
+    spillover_scenario: LocalizedCongestionSpilloverScenario | None = None,
 ) -> dict[str, Any]:
     runs = {
         "deterministic_namlss": _load_run(deterministic_run),
@@ -63,6 +84,11 @@ def generate_tracer_bullet_evaluation_report(
                 "graph_head_normalization", "not_recorded"
             ),
         },
+        "spillover_contrasts": (
+            None
+            if spillover_scenario is None
+            else measure_spillover_contrasts(graph_run, spillover_scenario)
+        ),
         "source_runs": {
             model_key: str(runs[model_key]["path"]) for model_key in MODEL_ORDER
         },
@@ -406,9 +432,10 @@ def _render_markdown(
             "The Localized Congestion Spillover Demo Scenario separates ordinary "
             "traffic behavior from graph-neighbor spillover; local lags explain routine "
             "traffic behavior, while upstream congestion propagates through the graph "
-            "to a downstream sensor. Neighbor lag features expose the spillover as an "
-            "expected slowdown through the location parameter and increased uncertainty "
-            "through the scale parameter.",
+            "and makes the downstream target both slower and more variable. Neighbor "
+            "lag features expose the spillover for distributional inspection. How a "
+            "fitted model splits it between its `mu` and `sigma` graph paths is a "
+            "Graph Gate Diagnostic, not part of the scenario.",
             "",
             "## Local Shape Contributions",
             "",
@@ -432,6 +459,7 @@ def _render_markdown(
             "",
             "![Graph contribution sigma](assets/graph_contribution_sigma.svg)",
             "",
+            *_spillover_contrast_lines(summary.get("spillover_contrasts")),
             "## Graph Gate Diagnostics",
             "",
             (
@@ -540,6 +568,40 @@ def _render_markdown(
         ]
     )
     return "\n".join(lines)
+
+
+def _spillover_contrast_lines(contrasts: Mapping[str, Any] | None) -> list[str]:
+    if contrasts is None:
+        return []
+    lines = [
+        "### Spillover Contrasts",
+        "",
+        "This run's downstream-sensor spillover prediction times compared with its "
+        "routine prediction times, pooled over the train, validation and test "
+        "splits. Targets are in original speed units; gated graph contributions "
+        "are on the predictor scale.",
+        "",
+        "| Contrast | Spillover | Routine | Spillover − routine |",
+        "|---|---:|---:|---:|",
+    ]
+    for name, label in SPILLOVER_CONTRAST_LABELS.items():
+        check = contrasts["checks"][name]
+        lines.append(
+            f"| {label} | {_fmt(check['spillover'])} | {_fmt(check['routine'])} | "
+            f"{_fmt(check['difference'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            "In this run, `gated_mu_share_of_slowdown` is "
+            f"{_fmt(contrasts['gated_mu_share_of_slowdown'])}: the gated `mu` "
+            "contrast divided by the standardized target-location contrast.",
+            "",
+            SPILLOVER_DISCLOSURE,
+            "",
+        ]
+    )
+    return lines
 
 
 def _label(model_key: str) -> str:

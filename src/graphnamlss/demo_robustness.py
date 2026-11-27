@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
-from statistics import fmean, stdev
 from typing import Any
 
 from graphnamlss.demo import run_concept_demo_bundle
-from graphnamlss.testing import (
-    LocalizedCongestionSpilloverScenario,
-    load_localized_congestion_spillover_demo_fixture,
+from graphnamlss.spillover_contrasts import (
+    SPILLOVER_CHECKS,
+    measure_spillover_contrasts,
 )
+from graphnamlss.testing import load_localized_congestion_spillover_demo_fixture
 
 
 CONCEPT_DEMO_ROBUSTNESS_SEEDS: tuple[int, ...] = tuple(range(20250214, 20250224))
@@ -33,23 +33,14 @@ COMPARISON = (
     "target speed mean (expected lower during spillover) and standard deviation "
     "(expected higher), and mean gated mu (expected lower) and gated sigma "
     "(expected higher) graph contributions. A check holds when the "
-    "spillover-minus-routine difference has the expected sign."
+    "spillover-minus-routine difference has the expected sign. "
+    "gated_mu_share_of_slowdown divides the gated mu difference by the same "
+    "difference of the standardized target mean, so it is the share of the "
+    "standardized slowdown the gated mu graph path carries; it is reported, not "
+    "enforced."
 )
 
 _GRAPH_RUN = Path("runs") / "tracer-bullet-graph-namlss"
-
-# name -> (artifact, row value, statistic, expected spillover direction)
-_CHECKS: dict[str, tuple[str, str, Callable[[Sequence[float]], float], str]] = {
-    "target_location": ("predictions.json", "target", fmean, "lower"),
-    "target_variability": ("predictions.json", "target", stdev, "higher"),
-    "gated_mu_contribution": ("graph_contributions.json", "gated_mu", fmean, "lower"),
-    "gated_sigma_contribution": (
-        "graph_contributions.json",
-        "gated_sigma",
-        fmean,
-        "higher",
-    ),
-}
 
 
 def run_concept_demo_robustness_probe(
@@ -95,69 +86,17 @@ def _run_seed(output_directory: Path, seed: int) -> dict[str, Any]:
         scenario = load_localized_congestion_spillover_demo_fixture(
             seed=seed
         ).scenario
-        checks = _spillover_checks(
+        contrasts = measure_spillover_contrasts(
             output_directory / bundle_directory / _GRAPH_RUN, scenario
         )
     except Exception as exc:  # noqa: BLE001
         return {**record, "status": "failed", "error": f"{type(exc).__name__}: {exc}"}
-    return {**record, "status": "completed", "checks": checks}
-
-
-def _spillover_checks(
-    graph_run: Path, scenario: LocalizedCongestionSpilloverScenario
-) -> dict[str, dict[str, Any]]:
-    artifacts = {
-        artifact: json.loads((graph_run / artifact).read_text())
-        for artifact in {artifact for artifact, *_ in _CHECKS.values()}
-    }
-    checks = {}
-    for name, (artifact, value_key, statistic, direction) in _CHECKS.items():
-        spillover = statistic(
-            _downstream_values(
-                artifacts[artifact],
-                scenario.downstream_sensor_id,
-                scenario.spillover_prediction_time_indices,
-                value_key,
-            )
-        )
-        routine = statistic(
-            _downstream_values(
-                artifacts[artifact],
-                scenario.downstream_sensor_id,
-                scenario.routine_prediction_time_indices,
-                value_key,
-            )
-        )
-        difference = spillover - routine
-        checks[name] = {
-            "spillover": round(spillover, 6),
-            "routine": round(routine, 6),
-            "difference": round(difference, 6),
-            "held": difference < 0.0 if direction == "lower" else difference > 0.0,
-        }
-    return checks
-
-
-def _downstream_values(
-    artifact: dict[str, Any],
-    sensor_id: str,
-    time_indices: Sequence[int],
-    value_key: str,
-) -> list[float]:
-    wanted = set(time_indices)
-    return [
-        row[value_key]
-        for split_rows in artifact["splits"].values()
-        for row in split_rows
-        if row["sensor_id"] == sensor_id
-        and row["time_index"] in wanted
-        and row[value_key] is not None
-    ]
+    return {**record, "status": "completed", **contrasts}
 
 
 def _aggregate(per_seed: Sequence[dict[str, Any]]) -> dict[str, Any]:
     checks = {}
-    for name in _CHECKS:
+    for name in SPILLOVER_CHECKS:
         evaluated = [record for record in per_seed if "checks" in record]
         checks[name] = {
             "held_on": [
@@ -172,8 +111,17 @@ def _aggregate(per_seed: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 record["seed"] for record in per_seed if "checks" not in record
             ],
         }
+    shares = [
+        record["gated_mu_share_of_slowdown"]
+        for record in per_seed
+        if "gated_mu_share_of_slowdown" in record
+    ]
     return {
         "checks": checks,
+        "gated_mu_share_of_slowdown": {
+            "min": min(shares, default=None),
+            "max": max(shares, default=None),
+        },
         "signal_holds_on_every_seed": all(
             not check["not_held_on"] and not check["not_evaluated_on"]
             for check in checks.values()
