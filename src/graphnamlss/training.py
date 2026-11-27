@@ -1014,7 +1014,7 @@ def _fit_tracer_bullet_graph_state(
     graph_weights_sigma, sigma_gate = _factor_graph_head(
         fitted_sigma_coefficients
     )
-    return {
+    graph_state = {
         "metadata": metadata,
         "feature_names": feature_names,
         "embedding_names": feature_names,
@@ -1027,6 +1027,14 @@ def _fit_tracer_bullet_graph_state(
         "graph_head_normalization": "unit_l2",
         "parameter_names": ("mu", "sigma"),
     }
+    # Centered Graph Contributions are centered on training statistics only, so a
+    # held-out prediction depends on its own row and this fitted state alone.
+    train_raw_rows = _raw_graph_contributions(graph_state, train_observations)
+    graph_state["contribution_centers"] = tuple(
+        sum(row[index] for row in train_raw_rows) / len(train_raw_rows)
+        for index in range(len(graph_state["parameter_names"]))
+    )
+    return graph_state
 
 
 def _fit_distributional_gnn_state(
@@ -1209,28 +1217,8 @@ def _graph_contribution_for_split(
     observations: Sequence[Any],
     local_eta: Sequence[Sequence[float]],
 ) -> dict[str, Any]:
-    embeddings = _graph_embeddings_by_observation(
-        observations,
-        feature_names=graph_state["feature_names"],
-        metadata=graph_state["metadata"],
-    )
-    raw_rows = []
-    for observation in observations:
-        centered_embedding = _center_embedding(
-            embeddings[(observation.sensor_id, observation.time_index)],
-            graph_state["embedding_centers"],
-        )
-        raw_rows.append(
-            (
-                _dot(graph_state["graph_weights_mu"], centered_embedding),
-                _dot(graph_state["graph_weights_sigma"], centered_embedding),
-            )
-        )
-
-    centers = tuple(
-        sum(row[index] for row in raw_rows) / len(raw_rows)
-        for index in range(len(graph_state["parameter_names"]))
-    )
+    raw_rows = _raw_graph_contributions(graph_state, observations)
+    centers = graph_state["contribution_centers"]
     rows = []
     eta = []
     for observation, eta_row, raw_row in zip(
@@ -1254,6 +1242,29 @@ def _graph_contribution_for_split(
         )
 
     return {"eta": tuple(eta), "rows": rows}
+
+
+def _raw_graph_contributions(
+    graph_state: Mapping[str, Any], observations: Sequence[Any]
+) -> list[tuple[float, float]]:
+    embeddings = _graph_embeddings_by_observation(
+        observations,
+        feature_names=graph_state["feature_names"],
+        metadata=graph_state["metadata"],
+    )
+    raw_rows = []
+    for observation in observations:
+        centered_embedding = _center_embedding(
+            embeddings[(observation.sensor_id, observation.time_index)],
+            graph_state["embedding_centers"],
+        )
+        raw_rows.append(
+            (
+                _dot(graph_state["graph_weights_mu"], centered_embedding),
+                _dot(graph_state["graph_weights_sigma"], centered_embedding),
+            )
+        )
+    return raw_rows
 
 
 def _graph_embeddings_by_observation(

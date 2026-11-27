@@ -41,8 +41,8 @@ A fitted location-scale model explaining a location shift that its location path
 _Avoid_: reading a `sigma` graph contrast as pure heteroskedasticity; Location-Shift Absorption
 
 **Centered Graph Contribution**:
-An additive graph contribution centered per distributional parameter so it does not absorb the predictor intercept.
-_Avoid_: raw graph contribution
+An additive graph contribution centered per distributional parameter on training-split statistics, so it does not absorb the predictor intercept and a held-out prediction depends only on its own row and the fitted model.
+_Avoid_: raw graph contribution; split-centered or batch-centered graph contribution
 
 **Neighbor-Focused Graph Stream**:
 An additive graph stream that emphasizes neighboring-node information while limiting direct reuse of the target node's own local features.
@@ -594,6 +594,7 @@ _Avoid_: risk score, disease rate unless the modeling target is explicitly a rat
 - "inject graph structure" was used for both adding a separate graph term and conditioning shape functions on graph context — resolved: the controlled factor is **Graph Injection Strategy**.
 - "graph contribution weight" could mean edge weights, graph head weights, or a scalar predictor gate — resolved: use **Graph Contribution Gate** for the scalar.
 - "graph contribution" could include arbitrary intercept offsets — resolved: use **Centered Graph Contribution** components.
+- "centered" could mean centered on whichever split or batch is being predicted — resolved: a **Centered Graph Contribution** is centered on training-split statistics, so held-out predictions never depend on the other rows they are scored with.
 - "GNN graph term" could mean neighbor-focused information or unrestricted local-feature reuse — resolved: treat **Graph Stream Self-Feature Access** as an explicit factor.
 - "graph context for shape functions" could mean simple neighbor summaries or dense learned embeddings — resolved: start with **Feature-Wise Neighbor Summary**.
 - "self-feature access" was clear for additive graph streams but ambiguous for graph-aware shape functions — resolved: distinguish **Neighbor-Only Shape Context** from **Self-Conditioned Shape Context**.
